@@ -14,7 +14,7 @@ export interface CartItem {
 export default function Root() {
   const [cart, setCart] = useState<CartItem[]>([])
 
-  // 1. ADD: Logic to add items (Existing)
+  // 1. ADD: Logic to add items
   const addToCart = (variant: any) => {
     setCart(prevCart => {
       const existingItem = prevCart.find(item => item.id === variant.id)
@@ -33,7 +33,7 @@ export default function Root() {
     })
   }
 
-  // 2. NEW: Logic to remove items
+  // 2. REMOVE: Logic to remove items
   const removeFromCart = (variantId: string) => {
     setCart(prevCart => {
       const existingItem = prevCart.find(item => item.id === variantId)
@@ -56,52 +56,49 @@ export default function Root() {
     })
   }
 
+  // 3. CHECKOUT: New RPC (Server-side) Logic
   const handleCheckout = async () => {
     if (cart.length === 0) return alert("Cart is empty!")
 
+    // Calculate total explicitly to ensure payload accuracy
     const totalAmount = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
 
-    const { data: orderData, error: orderError } = await supabase
-      .from('orders')
-      .insert({
-        total_amount: totalAmount,
-        status: 'COMPLETED',
-        payment_method: 'CASH',
-        device_id: 'POS-01'
-      })
-      .select()
-      .single()
-
-    if (orderError) {
-      console.error("Order Failed:", orderError)
-      return alert("Transaction Failed!")
+    // Prepare the JSON payload for the SQL function
+    const payload = {
+      totalAmount: totalAmount,
+      items: cart.map(item => ({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity
+      }))
     }
 
-    const orderItems = cart.map(item => ({
-      order_id: orderData.id,
-      product_name_snapshot: item.name,
-      price_at_sale: item.price,
-      quantity: item.quantity
-    }))
+    // Call the "sell_items" Database Function (RPC)
+    const { data, error } = await supabase.rpc('sell_items', { order_payload: payload })
 
-    const { error: itemsError } = await supabase.from('order_items').insert(orderItems)
-
-    if (itemsError) {
-      console.error("Items Failed:", itemsError)
+    if (error) {
+      console.error("Checkout Failed:", error)
+      alert("Transaction Failed! Check console for details.")
     } else {
-      alert("✅ Payment Successful! Order #" + orderData.id.slice(0, 4))
+      // Success!
+      alert("✅ Payment Successful!")
       setCart([]) 
+      
+      // Reload the page to fetch updated stock numbers from the DB
+      window.location.reload()
     }
   }
 
   return (
     <div className="app-container">
       <div className="main-section">
+        {/* Pass the add function to the Grid */}
         <ProductGrid onAddToCart={addToCart} />
       </div>
 
       <div className="sidebar-section">
-        {/* 3. Pass the new function down to Sidebar */}
+        {/* Pass cart data and handlers to the Sidebar */}
         <CartSidebar 
           cartItems={cart} 
           onCheckout={handleCheckout} 
