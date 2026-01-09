@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { supabase } from './supabaseClient'
 import ProductGrid from './components/ProductGrid'
 import CartSidebar from './components/CartSidebar'
-import ReceiptModal from './components/ReceiptModal' // <--- New Import
+import ReceiptModal from './components/ReceiptModal'
 import './App.css'
 
 export interface CartItem {
@@ -14,21 +14,20 @@ export interface CartItem {
 
 export default function Root() {
   const [cart, setCart] = useState<CartItem[]>([])
-  
-  // New state for the Receipt Modal
   const [showReceipt, setShowReceipt] = useState(false)
   const [lastOrder, setLastOrder] = useState<any>(null)
+  
+  // --- NEW: DISCOUNT STATE ---
+  const [discountPercentage, setDiscountPercentage] = useState(0) // 0, 10, 20, etc.
 
-  // 1. ADD: Logic to add items (With Stock Safety Checks)
   const addToCart = (variant: any) => {
     setCart(prevCart => {
       const existingItem = prevCart.find(item => item.id === variant.id)
       const currentQty = existingItem ? existingItem.quantity : 0
 
-      // SAFETY CHECK: If tracking is ON, stop if we hit the limit
       if (variant.track_stock && currentQty >= variant.stock_quantity) {
         alert(`Sorry, only ${variant.stock_quantity} left in stock!`)
-        return prevCart // Return the cart unchanged
+        return prevCart
       }
 
       if (existingItem) {
@@ -46,33 +45,32 @@ export default function Root() {
     })
   }
 
-  // 2. REMOVE: Logic to remove items
   const removeFromCart = (variantId: string) => {
     setCart(prevCart => {
       const existingItem = prevCart.find(item => item.id === variantId)
-      
       if (!existingItem) return prevCart
 
       if (existingItem.quantity === 1) {
         return prevCart.filter(item => item.id !== variantId)
       } else {
         return prevCart.map(item => 
-          item.id === variantId 
-          ? { ...item, quantity: item.quantity - 1 } 
-          : item
+          item.id === variantId ? { ...item, quantity: item.quantity - 1 } : item
         )
       }
     })
   }
 
-  // 3. CHECKOUT: Connects to Database & Shows Receipt
   const handleCheckout = async () => {
     if (cart.length === 0) return alert("Cart is empty!")
 
-    const totalAmount = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+    // 1. Calculate the Math
+    const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+    const discountAmount = Math.round(subtotal * (discountPercentage / 100))
+    const totalAmount = subtotal - discountAmount
 
+    // 2. Prepare Payload
     const payload = {
-      totalAmount: totalAmount,
+      totalAmount: totalAmount, // We charge the Discounted Price
       items: cart.map(item => ({
         id: item.id,
         name: item.name,
@@ -81,25 +79,24 @@ export default function Root() {
       }))
     }
 
-    // Call the database function
+    // 3. Send to Database
     const { data, error } = await supabase.rpc('sell_items', { order_payload: payload })
 
     if (error) {
       console.error("Checkout Failed:", error)
-      alert("Transaction Failed! Check console for details.")
+      alert("Transaction Failed! Check console.")
     } else {
-      // SUCCESS! 
-      // 1. Save order details so we can show the receipt
+      // 4. Show Receipt
       setLastOrder({
-        id: data.order_id, 
+        id: data.order_id,
+        subtotal: subtotal,          // <--- Send Subtotal
+        discount: discountAmount,    // <--- Send Discount Amount
         total: totalAmount,
-        items: [...cart]   // Save a copy of the cart items
+        items: [...cart]
       })
       
-      // 2. Clear the active cart
       setCart([]) 
-
-      // 3. Show the Receipt Modal
+      setDiscountPercentage(0) // Reset discount after sale
       setShowReceipt(true)
     }
   }
@@ -111,22 +108,25 @@ export default function Root() {
       </div>
 
       <div className="sidebar-section">
+        {/* Pass discount props to Sidebar */}
         <CartSidebar 
           cartItems={cart} 
           onCheckout={handleCheckout} 
-          onRemoveFromCart={removeFromCart} 
+          onRemoveFromCart={removeFromCart}
+          discountPercentage={discountPercentage}
+          onSetDiscount={setDiscountPercentage}
         />
       </div>
 
-      {/* NEW: RECEIPT MODAL COMPONENT */}
       {showReceipt && lastOrder && (
         <ReceiptModal 
           orderId={lastOrder.id}
+          subtotal={lastOrder.subtotal} // <--- New Prop
+          discount={lastOrder.discount} // <--- New Prop
           total={lastOrder.total}
           items={lastOrder.items}
           onClose={() => {
             setShowReceipt(false)
-            // Optional: Reload to fetch updated stock numbers
             window.location.reload() 
           }}
         />
