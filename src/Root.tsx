@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { supabase } from './supabaseClient'
 import ProductGrid from './components/ProductGrid'
 import CartSidebar from './components/CartSidebar'
+import ReceiptModal from './components/ReceiptModal' // <--- New Import
 import './App.css'
 
 export interface CartItem {
@@ -13,20 +14,22 @@ export interface CartItem {
 
 export default function Root() {
   const [cart, setCart] = useState<CartItem[]>([])
+  
+  // New state for the Receipt Modal
+  const [showReceipt, setShowReceipt] = useState(false)
+  const [lastOrder, setLastOrder] = useState<any>(null)
 
-  // 1. ADD: Logic to add items (Now with Safety Checks)
+  // 1. ADD: Logic to add items (With Stock Safety Checks)
   const addToCart = (variant: any) => {
     setCart(prevCart => {
       const existingItem = prevCart.find(item => item.id === variant.id)
       const currentQty = existingItem ? existingItem.quantity : 0
 
-      // --- NEW SAFETY CHECK ---
-      // If tracking is ON, and we are about to exceed the limit... STOP.
+      // SAFETY CHECK: If tracking is ON, stop if we hit the limit
       if (variant.track_stock && currentQty >= variant.stock_quantity) {
         alert(`Sorry, only ${variant.stock_quantity} left in stock!`)
         return prevCart // Return the cart unchanged
       }
-      // ------------------------
 
       if (existingItem) {
         return prevCart.map(item => 
@@ -48,15 +51,11 @@ export default function Root() {
     setCart(prevCart => {
       const existingItem = prevCart.find(item => item.id === variantId)
       
-      // If it doesn't exist, do nothing
       if (!existingItem) return prevCart
 
-      // If quantity is 1, remove it completely
       if (existingItem.quantity === 1) {
         return prevCart.filter(item => item.id !== variantId)
-      } 
-      // If quantity > 1, just decrease the count
-      else {
+      } else {
         return prevCart.map(item => 
           item.id === variantId 
           ? { ...item, quantity: item.quantity - 1 } 
@@ -66,7 +65,7 @@ export default function Root() {
     })
   }
 
-  // 3. CHECKOUT: New RPC (Server-side) Logic
+  // 3. CHECKOUT: Connects to Database & Shows Receipt
   const handleCheckout = async () => {
     if (cart.length === 0) return alert("Cart is empty!")
 
@@ -82,41 +81,56 @@ export default function Root() {
       }))
     }
 
-    // --- DEBUG LOGGING ---
-    console.log("SENDING PAYLOAD TO DB:", payload); 
-    // ---------------------
-
+    // Call the database function
     const { data, error } = await supabase.rpc('sell_items', { order_payload: payload })
 
-    // ... rest of your code
     if (error) {
       console.error("Checkout Failed:", error)
       alert("Transaction Failed! Check console for details.")
     } else {
-      // Success!
-      alert("✅ Payment Successful!")
-      setCart([]) 
+      // SUCCESS! 
+      // 1. Save order details so we can show the receipt
+      setLastOrder({
+        id: data.order_id, 
+        total: totalAmount,
+        items: [...cart]   // Save a copy of the cart items
+      })
       
-      // Reload the page to fetch updated stock numbers from the DB
-      window.location.reload()
+      // 2. Clear the active cart
+      setCart([]) 
+
+      // 3. Show the Receipt Modal
+      setShowReceipt(true)
     }
   }
 
   return (
     <div className="app-container">
       <div className="main-section">
-        {/* Pass the add function to the Grid */}
         <ProductGrid onAddToCart={addToCart} />
       </div>
 
       <div className="sidebar-section">
-        {/* Pass cart data and handlers to the Sidebar */}
         <CartSidebar 
           cartItems={cart} 
           onCheckout={handleCheckout} 
           onRemoveFromCart={removeFromCart} 
         />
       </div>
+
+      {/* NEW: RECEIPT MODAL COMPONENT */}
+      {showReceipt && lastOrder && (
+        <ReceiptModal 
+          orderId={lastOrder.id}
+          total={lastOrder.total}
+          items={lastOrder.items}
+          onClose={() => {
+            setShowReceipt(false)
+            // Optional: Reload to fetch updated stock numbers
+            window.location.reload() 
+          }}
+        />
+      )}
     </div>
   )
 }
