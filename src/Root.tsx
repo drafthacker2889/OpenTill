@@ -3,7 +3,7 @@ import { supabase } from './supabaseClient'
 import ProductGrid from './components/ProductGrid'
 import CartSidebar from './components/CartSidebar'
 import ReceiptModal from './components/ReceiptModal'
-import PaymentModal from './components/PaymentModal' // <--- IMPORT THIS
+import PaymentModal from './components/PaymentModal' 
 import './App.css'
 
 export interface CartItem {
@@ -13,9 +13,9 @@ export interface CartItem {
 export default function Root() {
   const [cart, setCart] = useState<CartItem[]>([])
   
-  // MODAL STATES
-  const [showPayment, setShowPayment] = useState(false) // Shows the Cash/Card options
-  const [showReceipt, setShowReceipt] = useState(false) // Shows the Bill
+  // States
+  const [showPayment, setShowPayment] = useState(false) 
+  const [showReceipt, setShowReceipt] = useState(false) 
   
   const [lastOrder, setLastOrder] = useState<any>(null)
   const [discountPercentage, setDiscountPercentage] = useState(0)
@@ -50,50 +50,49 @@ export default function Root() {
     })
   }
 
-  // 3. START CHECKOUT (Just opens the modal)
+  // 3. START CHECKOUT
   const handleInitiateCheckout = () => {
     if (cart.length === 0) return alert("Cart is empty!")
-    setShowPayment(true) // <--- Safety Gate Opens Here
+    setShowPayment(true) 
   }
 
-  // 4. CONFIRM PAYMENT (The Real Transaction)
-  const handleConfirmPayment = async (method: 'CASH' | 'CARD') => {
-    setShowPayment(false) // Close the payment modal
+  // 4. CONFIRM PAYMENT (With Tip!)
+  const handleConfirmPayment = async (method: 'CASH' | 'CARD', tipAmount: number) => {
+    setShowPayment(false) 
     
     // Calculate Math
     const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
     const discountAmount = Math.round(subtotal * (discountPercentage / 100))
-    const totalAmount = subtotal - discountAmount
+    const totalAmount = (subtotal - discountAmount) + tipAmount // Final Charge
 
-    // Prepare Payload (Now includes PAYMENT METHOD)
+    // Payload
     const payload = {
       totalAmount: totalAmount,
-      paymentMethod: method, // <--- Sending "CASH" or "CARD"
+      paymentMethod: method, 
       items: cart.map(item => ({
         id: item.id, name: item.name, price: item.price, quantity: item.quantity
       }))
     }
 
-    // Call Database
     const { data, error } = await supabase.rpc('sell_items', { order_payload: payload })
 
     if (error) {
       console.error("Checkout Failed:", error)
       alert("Transaction Failed! Check console.")
     } else {
-      // Success Logic
       setLastOrder({
         id: data.order_id,
         subtotal: subtotal,
         discount: discountAmount,
+        tip: tipAmount,    // <--- SAVE TIP FOR RECEIPT
         total: totalAmount,
         items: [...cart],
-        method: method // Save method for receipt if needed
+        method: method 
       })
       
       setCart([]) 
       setDiscountPercentage(0)
-      setShowReceipt(true) // Show the Bill
+      setShowReceipt(true) 
     }
   }
 
@@ -106,30 +105,31 @@ export default function Root() {
       <div className="sidebar-section">
         <CartSidebar 
           cartItems={cart} 
-          onCheckout={handleInitiateCheckout} // <--- Calls the Safety Gate
+          onCheckout={handleInitiateCheckout}
           onRemoveFromCart={removeFromCart}
           discountPercentage={discountPercentage}
           onSetDiscount={setDiscountPercentage}
         />
       </div>
 
-      {/* PAYMENT MODAL (The Safety Gate) */}
+      {/* PAYMENT MODAL (Pass subtotal so it can calculate 10% tip) */}
       {showPayment && (
         <PaymentModal 
-          total={cart.reduce((sum, item) => sum + (item.price * item.quantity), 0) * (1 - discountPercentage/100)}
+          subtotal={cart.reduce((sum, item) => sum + (item.price * item.quantity), 0) * (1 - discountPercentage/100)}
           onConfirm={handleConfirmPayment}
           onCancel={() => setShowPayment(false)}
         />
       )}
 
-      {/* RECEIPT MODAL (The Bill) */}
+      {/* RECEIPT MODAL */}
       {showReceipt && lastOrder && (
         <ReceiptModal 
           orderId={lastOrder.id}
           subtotal={lastOrder.subtotal}
           discount={lastOrder.discount}
+          tip={lastOrder.tip} // <--- Pass tip to receipt
           total={lastOrder.total}
-          paymentMethod={lastOrder.method}
+          paymentMethod={lastOrder.method} 
           items={lastOrder.items}
           onClose={() => {
             setShowReceipt(false)

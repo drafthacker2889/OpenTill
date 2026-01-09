@@ -4,13 +4,14 @@ interface Props {
   orderId: string
   subtotal: number
   discount: number
+  tip: number         // <--- NEW PROP
   total: number
-  paymentMethod: string // <--- NEW: Accept the payment type
+  paymentMethod: string 
   items: any[]
   onClose: () => void
 }
 
-export default function ReceiptModal({ orderId, subtotal, discount, total, paymentMethod, items, onClose }: Props) {
+export default function ReceiptModal({ orderId, subtotal, discount, tip, total, paymentMethod, items, onClose }: Props) {
   const handlePrint = () => {
     window.print()
   }
@@ -40,7 +41,6 @@ export default function ReceiptModal({ orderId, subtotal, discount, total, payme
           <p><strong>Order #:</strong> {orderId.slice(0, 8)}</p>
           <p><strong>Date:</strong> {new Date().toLocaleDateString()}</p>
           <p><strong>Time:</strong> {new Date().toLocaleTimeString()}</p>
-          {/* NEW: Display Payment Method */}
           <p><strong>Method:</strong> {paymentMethod}</p> 
         </div>
         <div style={{ borderBottom: '1px dashed #000', margin: '15px 0' }}></div>
@@ -55,6 +55,7 @@ export default function ReceiptModal({ orderId, subtotal, discount, total, payme
         </div>
         <div style={{ borderBottom: '1px dashed #000', margin: '15px 0' }}></div>
 
+        {/* --- FINANCIAL BREAKDOWN --- */}
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
           <span>Subtotal</span>
           <span>${(subtotal / 100).toFixed(2)}</span>
@@ -64,6 +65,14 @@ export default function ReceiptModal({ orderId, subtotal, discount, total, payme
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
             <span>Discount</span>
             <span>-${(discount / 100).toFixed(2)}</span>
+          </div>
+        )}
+
+        {/* SHOW TIP ONLY IF > 0 */}
+        {tip > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+            <span>Tip</span>
+            <span>${(tip / 100).toFixed(2)}</span>
           </div>
         )}
 

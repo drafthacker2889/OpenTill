@@ -4,7 +4,6 @@ import { supabase } from './supabaseClient'
 import Root from './Root'
 import AdminDashboard from './AdminDashboard'
 import Login from './components/Login'
-// REMOVED: import './index.css' <--- This was the cause of the crash!
 
 function App() {
   const [session, setSession] = useState<any>(null)
