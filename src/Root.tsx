@@ -3,23 +3,25 @@ import { supabase } from './supabaseClient'
 import ProductGrid from './components/ProductGrid'
 import CartSidebar from './components/CartSidebar'
 import ReceiptModal from './components/ReceiptModal'
+import PaymentModal from './components/PaymentModal' // <--- IMPORT THIS
 import './App.css'
 
 export interface CartItem {
-  id: string
-  name: string
-  price: number
-  quantity: number
+  id: string, name: string, price: number, quantity: number
 }
 
 export default function Root() {
   const [cart, setCart] = useState<CartItem[]>([])
-  const [showReceipt, setShowReceipt] = useState(false)
-  const [lastOrder, setLastOrder] = useState<any>(null)
   
-  // --- NEW: DISCOUNT STATE ---
-  const [discountPercentage, setDiscountPercentage] = useState(0) // 0, 10, 20, etc.
+  // MODAL STATES
+  const [showPayment, setShowPayment] = useState(false) // Shows the Cash/Card options
+  const [showReceipt, setShowReceipt] = useState(false) // Shows the Bill
+  
+  const [lastOrder, setLastOrder] = useState<any>(null)
+  const [discountPercentage, setDiscountPercentage] = useState(0)
+  const [refreshKey, setRefreshKey] = useState(0)
 
+  // 1. ADD TO CART
   const addToCart = (variant: any) => {
     setCart(prevCart => {
       const existingItem = prevCart.find(item => item.id === variant.id)
@@ -31,103 +33,107 @@ export default function Root() {
       }
 
       if (existingItem) {
-        return prevCart.map(item => 
-          item.id === variant.id ? { ...item, quantity: item.quantity + 1 } : item
-        )
+        return prevCart.map(item => item.id === variant.id ? { ...item, quantity: item.quantity + 1 } : item)
       } else {
-        return [...prevCart, { 
-          id: variant.id, 
-          name: variant.name, 
-          price: variant.price, 
-          quantity: 1 
-        }] 
+        return [...prevCart, { id: variant.id, name: variant.name, price: variant.price, quantity: 1 }]
       }
     })
   }
 
+  // 2. REMOVE FROM CART
   const removeFromCart = (variantId: string) => {
     setCart(prevCart => {
       const existingItem = prevCart.find(item => item.id === variantId)
       if (!existingItem) return prevCart
-
-      if (existingItem.quantity === 1) {
-        return prevCart.filter(item => item.id !== variantId)
-      } else {
-        return prevCart.map(item => 
-          item.id === variantId ? { ...item, quantity: item.quantity - 1 } : item
-        )
-      }
+      if (existingItem.quantity === 1) return prevCart.filter(item => item.id !== variantId)
+      return prevCart.map(item => item.id === variantId ? { ...item, quantity: item.quantity - 1 } : item)
     })
   }
 
-  const handleCheckout = async () => {
+  // 3. START CHECKOUT (Just opens the modal)
+  const handleInitiateCheckout = () => {
     if (cart.length === 0) return alert("Cart is empty!")
+    setShowPayment(true) // <--- Safety Gate Opens Here
+  }
 
-    // 1. Calculate the Math
+  // 4. CONFIRM PAYMENT (The Real Transaction)
+  const handleConfirmPayment = async (method: 'CASH' | 'CARD') => {
+    setShowPayment(false) // Close the payment modal
+    
+    // Calculate Math
     const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
     const discountAmount = Math.round(subtotal * (discountPercentage / 100))
     const totalAmount = subtotal - discountAmount
 
-    // 2. Prepare Payload
+    // Prepare Payload (Now includes PAYMENT METHOD)
     const payload = {
-      totalAmount: totalAmount, // We charge the Discounted Price
+      totalAmount: totalAmount,
+      paymentMethod: method, // <--- Sending "CASH" or "CARD"
       items: cart.map(item => ({
-        id: item.id,
-        name: item.name,
-        price: item.price,
-        quantity: item.quantity
+        id: item.id, name: item.name, price: item.price, quantity: item.quantity
       }))
     }
 
-    // 3. Send to Database
+    // Call Database
     const { data, error } = await supabase.rpc('sell_items', { order_payload: payload })
 
     if (error) {
       console.error("Checkout Failed:", error)
       alert("Transaction Failed! Check console.")
     } else {
-      // 4. Show Receipt
+      // Success Logic
       setLastOrder({
         id: data.order_id,
-        subtotal: subtotal,          // <--- Send Subtotal
-        discount: discountAmount,    // <--- Send Discount Amount
+        subtotal: subtotal,
+        discount: discountAmount,
         total: totalAmount,
-        items: [...cart]
+        items: [...cart],
+        method: method // Save method for receipt if needed
       })
       
       setCart([]) 
-      setDiscountPercentage(0) // Reset discount after sale
-      setShowReceipt(true)
+      setDiscountPercentage(0)
+      setShowReceipt(true) // Show the Bill
     }
   }
 
   return (
     <div className="app-container">
       <div className="main-section">
-        <ProductGrid onAddToCart={addToCart} />
+        <ProductGrid key={refreshKey} onAddToCart={addToCart} />
       </div>
 
       <div className="sidebar-section">
-        {/* Pass discount props to Sidebar */}
         <CartSidebar 
           cartItems={cart} 
-          onCheckout={handleCheckout} 
+          onCheckout={handleInitiateCheckout} // <--- Calls the Safety Gate
           onRemoveFromCart={removeFromCart}
           discountPercentage={discountPercentage}
           onSetDiscount={setDiscountPercentage}
         />
       </div>
 
+      {/* PAYMENT MODAL (The Safety Gate) */}
+      {showPayment && (
+        <PaymentModal 
+          total={cart.reduce((sum, item) => sum + (item.price * item.quantity), 0) * (1 - discountPercentage/100)}
+          onConfirm={handleConfirmPayment}
+          onCancel={() => setShowPayment(false)}
+        />
+      )}
+
+      {/* RECEIPT MODAL (The Bill) */}
       {showReceipt && lastOrder && (
         <ReceiptModal 
           orderId={lastOrder.id}
-          subtotal={lastOrder.subtotal} // <--- New Prop
-          discount={lastOrder.discount} // <--- New Prop
+          subtotal={lastOrder.subtotal}
+          discount={lastOrder.discount}
           total={lastOrder.total}
+          paymentMethod={lastOrder.method}
           items={lastOrder.items}
           onClose={() => {
             setShowReceipt(false)
-            window.location.reload() 
+            setRefreshKey(prev => prev + 1)
           }}
         />
       )}

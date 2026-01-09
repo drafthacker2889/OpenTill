@@ -2,14 +2,15 @@ import React from 'react'
 
 interface Props {
   orderId: string
-  subtotal: number // <--- New
-  discount: number // <--- New
+  subtotal: number
+  discount: number
   total: number
+  paymentMethod: string // <--- NEW: Accept the payment type
   items: any[]
   onClose: () => void
 }
 
-export default function ReceiptModal({ orderId, subtotal, discount, total, items, onClose }: Props) {
+export default function ReceiptModal({ orderId, subtotal, discount, total, paymentMethod, items, onClose }: Props) {
   const handlePrint = () => {
     window.print()
   }
@@ -39,6 +40,8 @@ export default function ReceiptModal({ orderId, subtotal, discount, total, items
           <p><strong>Order #:</strong> {orderId.slice(0, 8)}</p>
           <p><strong>Date:</strong> {new Date().toLocaleDateString()}</p>
           <p><strong>Time:</strong> {new Date().toLocaleTimeString()}</p>
+          {/* NEW: Display Payment Method */}
+          <p><strong>Method:</strong> {paymentMethod}</p> 
         </div>
         <div style={{ borderBottom: '1px dashed #000', margin: '15px 0' }}></div>
 
@@ -52,13 +55,11 @@ export default function ReceiptModal({ orderId, subtotal, discount, total, items
         </div>
         <div style={{ borderBottom: '1px dashed #000', margin: '15px 0' }}></div>
 
-        {/* --- MATH BREAKDOWN --- */}
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
           <span>Subtotal</span>
           <span>${(subtotal / 100).toFixed(2)}</span>
         </div>
 
-        {/* Only show discount line if there is a discount */}
         {discount > 0 && (
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
             <span>Discount</span>
