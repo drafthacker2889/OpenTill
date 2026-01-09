@@ -72,3 +72,23 @@
     display: none !important;
   }
 }
+
+/* Smoothly dim the pay button when the cart is empty */
+button:disabled {
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+
+/* Add a subtle 'pop' effect when clicking products */
+button:active {
+  transform: scale(0.98);
+}
+
+/* Make the scrollbar thin and modern for the product grid */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #ddd;
+  border-radius: 10px;
+}
