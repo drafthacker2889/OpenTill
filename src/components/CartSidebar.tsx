@@ -4,8 +4,8 @@ interface Props {
   cartItems: CartItem[]
   onCheckout: () => void
   onRemoveFromCart: (id: string) => void
-  discountPercentage: number          // <--- NEW
-  onSetDiscount: (val: number) => void // <--- NEW
+  discountPercentage: number
+  onSetDiscount: (val: number) => void
 }
 
 export default function CartSidebar({ cartItems, onCheckout, onRemoveFromCart, discountPercentage, onSetDiscount }: Props) {
@@ -16,61 +16,106 @@ export default function CartSidebar({ cartItems, onCheckout, onRemoveFromCart, d
   const finalTotal = subtotal - discountAmount
 
   return (
-    <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <h2>Current Order</h2>
+    <div style={{ padding: '25px', display: 'flex', flexDirection: 'column', height: '100%', boxSizing: 'border-box' }}>
+      <h2 style={{ marginTop: 0, fontSize: '1.5rem' }}>Current Order</h2>
       
-      <div style={{ flex: 1, overflowY: 'auto', marginTop: '20px' }}>
+      {/* --- CART ITEMS LIST --- */}
+      <div style={{ flex: 1, overflowY: 'auto', marginTop: '10px', paddingRight: '5px' }}>
         {cartItems.length === 0 ? (
-          <p style={{ color: '#888' }}>Cart is empty</p>
+          <p style={{ color: '#888', fontStyle: 'italic', marginTop: '20px' }}>No items added yet.</p>
         ) : (
           cartItems.map(item => (
-            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid #eee' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid #f0f0f0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <button 
                   onClick={() => onRemoveFromCart(item.id)}
-                  style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '50%', width: '24px', height: '24px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
+                  style={{ 
+                    background: '#ffebee', color: '#c62828', border: 'none', borderRadius: '6px', 
+                    width: '28px', height: '28px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' 
+                  }}
                 >
                   -
                 </button>
-                <div><strong>{item.quantity}x</strong> {item.name}</div>
+                <div>
+                  <div style={{ fontWeight: 'bold' }}>{item.name}</div>
+                  <div style={{ fontSize: '0.85rem', color: '#888' }}>x{item.quantity}</div>
+                </div>
               </div>
-              <div>${((item.price * item.quantity) / 100).toFixed(2)}</div>
+              <div style={{ fontWeight: '600' }}>${((item.price * item.quantity) / 100).toFixed(2)}</div>
             </div>
           ))
         )}
       </div>
 
-      <div style={{ borderTop: '2px solid #333', paddingTop: '20px', marginTop: 'auto' }}>
+      {/* --- BOTTOM SECTION --- */}
+      <div style={{ marginTop: 'auto', paddingTop: '20px' }}>
         
-        {/* --- DISCOUNT BUTTONS --- */}
-        <div style={{ display: 'flex', gap: '5px', marginBottom: '15px' }}>
-          <button onClick={() => onSetDiscount(0)} style={{ flex: 1, padding: '8px', cursor: 'pointer', background: discountPercentage === 0 ? '#333' : '#eee', color: discountPercentage === 0 ? 'white' : 'black', border: 'none', borderRadius: '4px' }}>None</button>
-          <button onClick={() => onSetDiscount(10)} style={{ flex: 1, padding: '8px', cursor: 'pointer', background: discountPercentage === 10 ? '#333' : '#eee', color: discountPercentage === 10 ? 'white' : 'black', border: 'none', borderRadius: '4px' }}>10%</button>
-          <button onClick={() => onSetDiscount(20)} style={{ flex: 1, padding: '8px', cursor: 'pointer', background: discountPercentage === 20 ? '#333' : '#eee', color: discountPercentage === 20 ? 'white' : 'black', border: 'none', borderRadius: '4px' }}>20%</button>
-          <button onClick={() => onSetDiscount(50)} style={{ flex: 1, padding: '8px', cursor: 'pointer', background: discountPercentage === 50 ? '#333' : '#eee', color: discountPercentage === 50 ? 'white' : 'black', border: 'none', borderRadius: '4px' }}>50%</button>
-        </div>
-
-        {/* --- TOTALS DISPLAY --- */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#666', marginBottom: '5px' }}>
-          <span>Subtotal:</span>
-          <span>${(subtotal / 100).toFixed(2)}</span>
-        </div>
-        
-        {discountPercentage > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'red', marginBottom: '10px' }}>
-            <span>Discount ({discountPercentage}%):</span>
-            <span>-${(discountAmount / 100).toFixed(2)}</span>
+        {/* Discount Toggles (Smaller & Cleaner) */}
+        <div style={{ marginBottom: '20px' }}>
+          <p style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#aaa', textTransform: 'uppercase', marginBottom: '8px' }}>Discount</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+            {[0, 10, 20, 50].map(pct => (
+              <button 
+                key={pct}
+                onClick={() => onSetDiscount(pct)} 
+                style={{ 
+                  padding: '8px', cursor: 'pointer', 
+                  background: discountPercentage === pct ? 'black' : 'white', 
+                  color: discountPercentage === pct ? 'white' : '#333', 
+                  border: discountPercentage === pct ? '1px solid black' : '1px solid #ddd', 
+                  borderRadius: '6px', fontSize: '0.9rem', fontWeight: '600', transition: '0.2s'
+                }}
+              >
+                {pct === 0 ? 'None' : `${pct}%`}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
 
-        <h1 style={{ marginTop: '0' }}>Total: ${(finalTotal / 100).toFixed(2)}</h1>
-        
-        <button 
-          onClick={onCheckout}
-          style={{ width: '100%', padding: '15px', background: 'black', color: 'white', border: 'none', borderRadius: '5px', fontSize: '1.2rem', marginTop: '10px', cursor: 'pointer' }}
-        >
-          Pay Now
-        </button>
+        {/* Math Summary */}
+        <div style={{ marginBottom: '20px', fontSize: '0.95rem', color: '#666' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+            <span>Subtotal</span>
+            <span>${(subtotal / 100).toFixed(2)}</span>
+          </div>
+          {discountPercentage > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#e53935' }}>
+              <span>Discount</span>
+              <span>-${(discountAmount / 100).toFixed(2)}</span>
+            </div>
+          )}
+        </div>
+
+        {/* NEW: Split Footer Layout */}
+        <div style={{ 
+          display: 'flex', alignItems: 'center', gap: '15px', 
+          borderTop: '2px solid #f0f0f0', paddingTop: '20px' 
+        }}>
+          
+          {/* Left: Total Amount */}
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '0.85rem', color: '#999', textTransform: 'uppercase', fontWeight: 'bold' }}>Total</div>
+            <div style={{ fontSize: '2.2rem', fontWeight: '800', lineHeight: '1' }}>
+              ${(finalTotal / 100).toFixed(2)}
+            </div>
+          </div>
+
+          {/* Right: Pay Button */}
+          <button 
+            onClick={onCheckout}
+            style={{ 
+              flex: 1.5, padding: '18px', 
+              background: '#111', color: 'white', 
+              border: 'none', borderRadius: '12px', 
+              fontSize: '1.1rem', fontWeight: 'bold', 
+              cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px'
+            }}
+          >
+            Pay Now ➔
+          </button>
+        </div>
+
       </div>
     </div>
   )
