@@ -14,18 +14,22 @@ export interface CartItem {
 export default function Root() {
   const [cart, setCart] = useState<CartItem[]>([])
 
-  const addToCart = (product: any) => {
+    const addToCart = (variant: any) => {
     setCart(prevCart => {
-      const existingItem = prevCart.find(item => item.id === product.id)
+      // Check if this specific VARIANT is already in the cart
+      const existingItem = prevCart.find(item => item.id === variant.id)
+      
       if (existingItem) {
         return prevCart.map(item => 
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+          item.id === variant.id 
+          ? { ...item, quantity: item.quantity + 1 } 
+          : item
         )
       } else {
         return [...prevCart, { 
-          id: product.id, 
-          name: product.name, 
-          price: 1000, 
+          id: variant.id, 
+          name: variant.name, 
+          price: variant.price, // <--- Using the REAL price from DB
           quantity: 1 
         }] 
       }
