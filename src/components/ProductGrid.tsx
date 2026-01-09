@@ -1,18 +1,19 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 
-// 1. Define the shape of our Data
 interface Variant {
   id: string
   name: string
   price: number
+  stock_quantity: number    // <--- NEW
+  track_stock: boolean      // <--- NEW
 }
 
 interface Product {
   id: string
   name: string
   image_url: string | null
-  variants: Variant[] // Nested list of sizes/options
+  variants: Variant[]
 }
 
 interface Props {
@@ -23,23 +24,20 @@ export default function ProductGrid({ onAddToCart }: Props) {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    // 2. Fetch Products AND their nested Variants (The "Join" query)
-    async function fetchData() {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*, variants(*)') // <--- This gets the sub-items automatically
-        .order('name')
-      
-      if (error) {
-        console.error('Error loading products:', error)
-      } else {
-        setProducts(data || [])
-      }
-      setLoading(false)
-    }
+  // Function to refresh data (we will use this later when stock changes)
+  const fetchProducts = async () => {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*, variants(*)')
+      .order('name')
+    
+    if (error) console.error('Error:', error)
+    else setProducts(data || [])
+    setLoading(false)
+  }
 
-    fetchData()
+  useEffect(() => {
+    fetchProducts()
   }, [])
 
   if (loading) return <div style={{ padding: '20px' }}>Loading menu...</div>
@@ -49,54 +47,64 @@ export default function ProductGrid({ onAddToCart }: Props) {
       {products.map((product) => (
         <div key={product.id} className="product-card">
           
-          {/* 3. Display Image (Only if one exists) */}
           {product.image_url && (
             <img 
               src={product.image_url} 
               alt={product.name} 
-              style={{ 
-                width: '100%', 
-                height: '140px', 
-                objectFit: 'cover', 
-                borderRadius: '6px', 
-                marginBottom: '10px' 
-              }} 
+              style={{ width: '100%', height: '140px', objectFit: 'cover', borderRadius: '6px', marginBottom: '10px' }} 
             />
           )}
 
           <h3>{product.name}</h3>
           
-          {/* 4. Display Buttons for each Variant (Small, Large, etc) */}
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
-            {product.variants.length > 0 ? (
-              product.variants.map((variant) => (
+            {product.variants.map((variant) => {
+              
+              // LOGIC: Check if item is out of stock
+              const isOutOfStock = variant.track_stock && variant.stock_quantity <= 0
+              
+              return (
                 <button
                   key={variant.id}
+                  disabled={isOutOfStock} // <--- DISABLE BUTTON IF NO STOCK
                   onClick={() => onAddToCart({
-                    id: variant.id,                         // Use the specific Variant ID
-                    name: `${product.name} (${variant.name})`, // e.g. "Latte (Small)"
-                    price: variant.price
+                    id: variant.id,
+                    name: `${product.name} (${variant.name})`,
+                    price: variant.price,
+                    // Pass these through so we can check them in the cart later if needed
+                    track_stock: variant.track_stock, 
+                    stock_quantity: variant.stock_quantity
                   })}
                   style={{
                     flex: 1,
                     padding: '10px',
-                    background: '#222',
+                    // Grey out background if out of stock
+                    background: isOutOfStock ? '#ccc' : '#222', 
                     color: 'white',
                     border: 'none',
                     borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '0.9rem'
+                    cursor: isOutOfStock ? 'not-allowed' : 'pointer',
+                    fontSize: '0.9rem',
+                    opacity: isOutOfStock ? 0.6 : 1
                   }}
                 >
                   {variant.name} <br/> 
+                  
+                  {/* PRICE DISPLAY */}
                   <span style={{ opacity: 0.8, fontSize: '0.8em' }}>
                     ${(variant.price / 100).toFixed(2)}
                   </span>
+
+                  {/* STOCK DISPLAY (Only if tracking is ON) */}
+                  {variant.track_stock && (
+                    <div style={{ fontSize: '0.7em', color: isOutOfStock ? 'red' : '#4caf50', marginTop: '2px' }}>
+                      {isOutOfStock ? 'Out of Stock' : `${variant.stock_quantity} left`}
+                    </div>
+                  )}
+
                 </button>
-              ))
-            ) : (
-              <p style={{ color: '#888', fontSize: '0.8rem' }}>No options available</p>
-            )}
+              )
+            })}
           </div>
 
         </div>
