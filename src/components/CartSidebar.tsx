@@ -2,10 +2,10 @@ import { CartItem } from '../Root'
 
 interface Props {
   cartItems: CartItem[]
+  onCheckout: () => void // <--- Accept the function
 }
 
-export default function CartSidebar({ cartItems }: Props) {
-  // Calculate total price
+export default function CartSidebar({ cartItems, onCheckout }: Props) {
   const totalCents = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
 
   return (
@@ -31,7 +31,12 @@ export default function CartSidebar({ cartItems }: Props) {
 
       <div style={{ borderTop: '2px solid #333', paddingTop: '20px', marginTop: 'auto' }}>
         <h1>Total: ${(totalCents / 100).toFixed(2)}</h1>
-        <button style={{ width: '100%', padding: '15px', background: 'black', color: 'white', border: 'none', borderRadius: '5px', fontSize: '1.2rem', marginTop: '10px', cursor: 'pointer' }}>
+        
+        {/* CONNECT THE BUTTON HERE */}
+        <button 
+          onClick={onCheckout}
+          style={{ width: '100%', padding: '15px', background: 'black', color: 'white', border: 'none', borderRadius: '5px', fontSize: '1.2rem', marginTop: '10px', cursor: 'pointer' }}
+        >
           Pay Now
         </button>
       </div>
