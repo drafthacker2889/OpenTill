@@ -1,44 +1,36 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 
-// 1. Define what a "Product" looks like
 interface Product {
   id: string
   name: string
   image_url: string | null
 }
 
-export default function ProductGrid() {
+// Accept the function as a "Prop"
+interface Props {
+  onAddToCart: (product: Product) => void
+}
+
+export default function ProductGrid({ onAddToCart }: Props) {
   const [products, setProducts] = useState<Product[]>([])
-  const [loading, setLoading] = useState(true)
 
-  // 2. Fetch data when the component loads
   useEffect(() => {
-    async function fetchProducts() {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-      
-      if (error) {
-        console.error('Error fetching products:', error)
-      } else {
-        setProducts(data || [])
-      }
-      setLoading(false)
-    }
-
-    fetchProducts()
+    supabase.from('products').select('*').then(({ data }) => {
+      setProducts(data || [])
+    })
   }, [])
-
-  if (loading) return <div>Loading items...</div>
 
   return (
     <div className="product-grid">
-      {/* 3. Map through the data to create buttons */}
       {products.map((product) => (
-        <div key={product.id} className="product-card">
+        <div 
+          key={product.id} 
+          className="product-card"
+          onClick={() => onAddToCart(product)} // <--- THE MAGIC CLICK EVENT
+        >
           <h3>{product.name}</h3>
-          {/* We will add Price here later when we connect the Variants table */}
+          <p>$10.00</p>
         </div>
       ))}
     </div>
