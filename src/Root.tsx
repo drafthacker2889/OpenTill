@@ -14,10 +14,20 @@ export interface CartItem {
 export default function Root() {
   const [cart, setCart] = useState<CartItem[]>([])
 
-  // 1. ADD: Logic to add items
+  // 1. ADD: Logic to add items (Now with Safety Checks)
   const addToCart = (variant: any) => {
     setCart(prevCart => {
       const existingItem = prevCart.find(item => item.id === variant.id)
+      const currentQty = existingItem ? existingItem.quantity : 0
+
+      // --- NEW SAFETY CHECK ---
+      // If tracking is ON, and we are about to exceed the limit... STOP.
+      if (variant.track_stock && currentQty >= variant.stock_quantity) {
+        alert(`Sorry, only ${variant.stock_quantity} left in stock!`)
+        return prevCart // Return the cart unchanged
+      }
+      // ------------------------
+
       if (existingItem) {
         return prevCart.map(item => 
           item.id === variant.id ? { ...item, quantity: item.quantity + 1 } : item
@@ -60,10 +70,8 @@ export default function Root() {
   const handleCheckout = async () => {
     if (cart.length === 0) return alert("Cart is empty!")
 
-    // Calculate total explicitly to ensure payload accuracy
     const totalAmount = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
 
-    // Prepare the JSON payload for the SQL function
     const payload = {
       totalAmount: totalAmount,
       items: cart.map(item => ({
@@ -74,9 +82,13 @@ export default function Root() {
       }))
     }
 
-    // Call the "sell_items" Database Function (RPC)
+    // --- DEBUG LOGGING ---
+    console.log("SENDING PAYLOAD TO DB:", payload); 
+    // ---------------------
+
     const { data, error } = await supabase.rpc('sell_items', { order_payload: payload })
 
+    // ... rest of your code
     if (error) {
       console.error("Checkout Failed:", error)
       alert("Transaction Failed! Check console for details.")
