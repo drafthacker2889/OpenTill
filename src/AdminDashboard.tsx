@@ -2,19 +2,19 @@ import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState('inventory') // 'inventory', 'sales', 'staff'
+  const [activeTab, setActiveTab] = useState('inventory') 
   const [variants, setVariants] = useState<any[]>([])
   const [orders, setOrders] = useState<any[]>([])
   const [staff, setStaff] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
 
-  // --- Inventory Form State ---
+  // Inventory Form State
   const [newName, setNewName] = useState('')
   const [newCategory, setNewCategory] = useState('Coffee')
   const [newPrice, setNewPrice] = useState('') 
   const [newVariantName, setNewVariantName] = useState('Standard')
 
-  // --- Staff Form State ---
+  // Staff Form State
   const [newEmail, setNewEmail] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newRole, setNewRole] = useState('cashier')
@@ -25,9 +25,7 @@ export default function AdminDashboard() {
     else fetchStaff()
   }, [activeTab])
 
-  // ==========================
-  // 1. INVENTORY ACTIONS
-  // ==========================
+  // --- ACTIONS ---
   const fetchVariants = async () => {
     setLoading(true)
     const { data } = await supabase.from('variants').select('*, products(name, category)').order('product_id')
@@ -40,27 +38,19 @@ export default function AdminDashboard() {
     if (!newName || !newPrice) return alert("Please fill in Name and Price")
 
     let productId;
-    
-    // Check if product already exists to avoid creating separate boxes
-    const { data: existingProd } = await supabase
-      .from('products')
-      .select('id')
-      .eq('name', newName)
-      .single()
+    const { data: existingProd } = await supabase.from('products').select('id').eq('name', newName).single()
 
     if (existingProd) {
       productId = existingProd.id
     } else {
       const { data: productData, error: productError } = await supabase
-        .from('products')
-        .insert({ name: newName, category: newCategory })
-        .select().single()
+        .from('products').insert({ name: newName, category: newCategory }).select().single()
       if (productError) return alert(productError.message)
       productId = productData.id
     }
 
     const priceInCents = Math.round(parseFloat(newPrice) * 100)
-    const { error: variantError } = await supabase.from('variants').insert({
+    await supabase.from('variants').insert({
       product_id: productId,
       name: newVariantName,
       price: priceInCents,
@@ -68,11 +58,8 @@ export default function AdminDashboard() {
       track_stock: false
     })
 
-    if (variantError) alert(variantError.message)
-    else {
-      setNewName(''); setNewPrice(''); setNewVariantName('Standard');
-      fetchVariants()
-    }
+    setNewName(''); setNewPrice(''); setNewVariantName('Standard');
+    fetchVariants()
   }
 
   const updateVariantField = async (id: string, field: string, value: any) => {
@@ -81,15 +68,11 @@ export default function AdminDashboard() {
   }
 
   const handleDeleteVariant = async (v: any) => {
-    if (!confirm(`Are you sure you want to delete ${v.products?.name} (${v.name})?`)) return
-    const { error } = await supabase.from('variants').delete().eq('id', v.id)
-    if (error) alert(error.message)
-    else fetchVariants()
+    if (!confirm(`Are you sure you want to delete this?`)) return
+    await supabase.from('variants').delete().eq('id', v.id)
+    fetchVariants()
   }
 
-  // ==========================
-  // 2. SALES ACTIONS
-  // ==========================
   const fetchOrders = async () => {
     setLoading(true)
     const { data } = await supabase.from('orders').select('*, order_items(*)').order('created_at', { ascending: false })
@@ -97,9 +80,6 @@ export default function AdminDashboard() {
     setLoading(false)
   }
 
-  // ==========================
-  // 3. STAFF ACTIONS
-  // ==========================
   const fetchStaff = async () => {
     setLoading(true)
     const { data } = await supabase.from('staff_directory').select('*')
@@ -109,26 +89,14 @@ export default function AdminDashboard() {
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newEmail || !newPassword) return alert("Fill in all fields")
-
-    const { error } = await supabase.rpc('create_employee', {
-      email: newEmail,
-      password: newPassword,
-      role_name: newRole
-    })
-
-    if (error) alert("Failed: " + error.message)
-    else {
-      alert("Staff created!")
-      setNewEmail(''); setNewPassword('');
-      fetchStaff()
-    }
+    const { error } = await supabase.rpc('create_employee', { email: newEmail, password: newPassword, role_name: newRole })
+    if (error) alert(error.message)
+    else { alert("Staff created!"); fetchStaff(); }
   }
 
   return (
     <div style={{ padding: '40px', maxWidth: '1200px', margin: '0 auto', fontFamily: 'sans-serif' }}>
       
-      {/* HEADER */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
         <h1>📦 Management Dashboard</h1>
         <a href="/" style={{ padding: '10px 20px', background: '#333', color: 'white', textDecoration: 'none', borderRadius: '5px' }}>
@@ -136,14 +104,13 @@ export default function AdminDashboard() {
         </a>
       </div>
 
-      {/* TABS */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
         {['inventory', 'sales', 'staff'].map(tab => (
           <button 
-            key={tab}
-            onClick={() => setActiveTab(tab)}
+            key={tab} 
+            onClick={() => setActiveTab(tab)} 
             style={{
-              padding: '10px 20px', cursor: 'pointer', fontWeight: 'bold', textTransform: 'capitalize',
+              padding: '10px 20px', cursor: 'pointer', fontWeight: 'bold',
               background: activeTab === tab ? 'black' : '#eee',
               color: activeTab === tab ? 'white' : 'black',
               border: 'none', borderRadius: '5px'
@@ -159,9 +126,8 @@ export default function AdminDashboard() {
         {loading ? (
           <div style={{ padding: '20px' }}>Loading...</div>
         ) : activeTab === 'inventory' ? (
-          
           <div style={{ padding: '20px' }}>
-            {/* ADD PRODUCT FORM */}
+            {/* ADD ITEM FORM */}
             <div style={{ background: '#f8f9fa', padding: '20px', borderRadius: '8px', marginBottom: '30px', border: '1px solid #eee' }}>
               <h3 style={{ marginTop: 0 }}>Add New Item</h3>
               <form onSubmit={handleCreateProduct} style={{ display: 'flex', gap: '15px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -175,53 +141,49 @@ export default function AdminDashboard() {
 
             {/* INVENTORY TABLE */}
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead style={{ background: '#f5f5f5' }}><tr style={{ textAlign: 'left' }}><th style={{ padding: '15px' }}>Product</th><th style={{ padding: '15px' }}>Variant</th><th style={{ padding: '15px' }}>Price ($)</th><th style={{ padding: '15px' }}>Stock Qty</th><th style={{ padding: '15px' }}>Actions</th></tr></thead>
+              <thead style={{ background: '#f5f5f5' }}>
+                <tr style={{ textAlign: 'left' }}>
+                  <th style={{ padding: '15px' }}>Product</th>
+                  <th style={{ padding: '15px' }}>Variant</th>
+                  <th style={{ padding: '15px' }}>Price ($)</th>
+                  <th style={{ padding: '15px' }}>Track Stock?</th>
+                  <th style={{ padding: '15px' }}>Stock Qty</th>
+                  <th style={{ padding: '15px' }}>Actions</th>
+                </tr>
+              </thead>
               <tbody>
                 {variants.map(v => (
                   <tr key={v.id} style={{ borderBottom: '1px solid #eee' }}>
                     <td style={{ padding: '15px', fontWeight: 'bold' }}>{v.products?.name}</td>
                     <td style={{ padding: '15px' }}><input value={v.name} onChange={(e) => updateVariantField(v.id, 'name', e.target.value)} style={editInput} /></td>
                     <td style={{ padding: '15px' }}><input type="number" step="0.01" value={(v.price / 100).toFixed(2)} onChange={(e) => updateVariantField(v.id, 'price', Math.round(parseFloat(e.target.value) * 100))} style={editInput} /></td>
-                    <td style={{ padding: '15px' }}><input type="number" value={v.stock_quantity} onChange={(e) => updateVariantField(v.id, 'stock_quantity', parseInt(e.target.value))} style={editInput} /></td>
+                    <td style={{ padding: '15px' }}><input type="checkbox" checked={v.track_stock} onChange={(e) => updateVariantField(v.id, 'track_stock', e.target.checked)} /></td>
+                    <td style={{ padding: '15px' }}><input type="number" disabled={!v.track_stock} value={v.stock_quantity} onChange={(e) => updateVariantField(v.id, 'stock_quantity', parseInt(e.target.value || '0'))} style={{ ...editInput, opacity: v.track_stock ? 1 : 0.5 }} /></td>
                     <td style={{ padding: '15px' }}><button onClick={() => handleDeleteVariant(v)} style={delBtn}>Delete</button></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-
         ) : activeTab === 'sales' ? (
-          
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead style={{ background: '#f5f5f5' }}><tr style={{ textAlign: 'left' }}><th style={{ padding: '15px' }}>Date</th><th style={{ padding: '15px' }}>Items</th><th style={{ padding: '15px' }}>Total</th></tr></thead>
-            <tbody>
-              {orders.map(order => (
-                <tr key={order.id} style={{ borderBottom: '1px solid #eee' }}>
-                  <td style={{ padding: '15px' }}>{new Date(order.created_at).toLocaleString()}</td>
-                  <td style={{ padding: '15px' }}>{order.order_items?.length} items</td>
-                  <td style={{ padding: '15px', fontWeight: 'bold' }}>${(order.total_amount / 100).toFixed(2)}</td>
-                </tr>
-              ))}
-            </tbody>
+            <tbody>{orders.map(order => (<tr key={order.id} style={{ borderBottom: '1px solid #eee' }}><td style={{ padding: '15px' }}>{new Date(order.created_at).toLocaleString()}</td><td style={{ padding: '15px' }}>{order.order_items?.length} items</td><td style={{ padding: '15px', fontWeight: 'bold' }}>${(order.total_amount / 100).toFixed(2)}</td></tr>))}</tbody>
           </table>
-
         ) : (
-          
           <div style={{ padding: '30px' }}>
             <div style={{ background: '#f9f9f9', padding: '20px', borderRadius: '8px', marginBottom: '30px' }}>
-              <h3>Add Staff Member</h3>
+              <h3>Manage Staff</h3>
               <form onSubmit={handleCreateUser} style={{ display: 'flex', gap: '10px' }}>
                 <input placeholder="Email" value={newEmail} onChange={e => setNewEmail(e.target.value)} style={inputStyle} />
                 <input type="password" placeholder="Password" value={newPassword} onChange={e => setNewPassword(e.target.value)} style={inputStyle} />
                 <select value={newRole} onChange={e => setNewRole(e.target.value)} style={inputStyle}><option value="cashier">Cashier</option><option value="manager">Manager</option></select>
-                <button type="submit" style={{ padding: '10px 20px', background: 'black', color: 'white', borderRadius: '5px' }}>Create</button>
+                <button type="submit" style={{ padding: '10px 20px', background: 'black', color: 'white', borderRadius: '5px' }}>Create Staff</button>
               </form>
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead style={{ background: '#f5f5f5' }}><tr style={{ textAlign: 'left' }}><th style={{ padding: '15px' }}>Email</th><th style={{ padding: '15px' }}>Role</th></tr></thead>
-              <tbody>
-                {staff.map(s => <tr key={s.id} style={{ borderBottom: '1px solid #eee' }}><td style={{ padding: '15px' }}>{s.email}</td><td style={{ padding: '15px' }}>{s.role}</td></tr>)}
-              </tbody>
+              <tbody>{staff.map(s => <tr key={s.id} style={{ borderBottom: '1px solid #eee' }}><td style={{ padding: '15px' }}>{s.email}</td><td style={{ padding: '15px' }}>{s.role}</td></tr>)}</tbody>
             </table>
           </div>
         )}
