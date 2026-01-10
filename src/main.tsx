@@ -4,6 +4,7 @@ import { supabase } from './supabaseClient'
 import Root from './Root'
 import AdminDashboard from './AdminDashboard'
 import Login from './components/Login'
+import './App.css'
 
 function App() {
   const [session, setSession] = useState<any>(null)
@@ -69,7 +70,7 @@ function App() {
 
   // POS PAGE RENDER
   return (
-    <div>
+    <div className="app-container">
       {/* --- BRANDED TOP HEADER --- */}
       <div style={{ 
         background: '#1a1a1a', 
@@ -79,7 +80,8 @@ function App() {
         justifyContent: 'space-between', 
         alignItems: 'center',
         boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
-        fontFamily: 'sans-serif'
+        fontFamily: 'sans-serif',
+        zIndex: 100
       }}>
         {/* BRAND NAME */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
