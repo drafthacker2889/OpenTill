@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient';
 interface KitchenTicket {
   id: number;
   table_number: string;
-  items: { name: string; qty: number; void?: boolean }[];
+  items: { name: string; qty: number; void?: boolean; status?: 'PENDING' | 'READY' }[]; // Updated for partial status
   status: 'PENDING' | 'COMPLETED' | 'VOIDED';
   created_at: string;
 }
@@ -12,9 +12,15 @@ interface KitchenTicket {
 export default function KitchenDisplay() {
   const [tickets, setTickets] = useState<KitchenTicket[]>([]);
   const [loading, setLoading] = useState(true);
+  const [now, setNow] = useState(Date.now()); // NEW: State for the 30s ticker
 
   useEffect(() => {
     fetchActiveTickets();
+
+    // NEW: Ticker that updates current time every 30 seconds
+    const ticker = setInterval(() => {
+      setNow(Date.now());
+    }, 30000); 
 
     // FIXED REAL-TIME SUBSCRIPTION: Listen for ALL changes (Insert, Update, Delete)
     const channel = supabase
@@ -31,6 +37,7 @@ export default function KitchenDisplay() {
 
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(ticker); // Clean up the interval
     };
   }, []);
 
@@ -52,9 +59,25 @@ export default function KitchenDisplay() {
     setLoading(false);
   };
 
+  // --- NEW: Handle Partial Completion (Tap Item) ---
+  const toggleItemStatus = async (ticket: KitchenTicket, itemIndex: number) => {
+    const newItems = [...ticket.items];
+    const currentStatus = newItems[itemIndex].status;
+    
+    // Toggle between PENDING and READY
+    newItems[itemIndex].status = currentStatus === 'READY' ? 'PENDING' : 'READY';
+
+    const { error } = await supabase
+      .from('kitchen_tickets')
+      .update({ items: newItems })
+      .eq('id', ticket.id);
+
+    if (!error) fetchActiveTickets();
+  };
+
   const playNotificationSound = () => {
     const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-    audio.play().catch(() => console.log("Audio play blocked. Click screen once."));
+    audio.play().catch(() => console.log("Audio play blocked by browser. Click screen once."));
   };
 
   const handleComplete = async (id: number) => {
@@ -69,8 +92,7 @@ export default function KitchenDisplay() {
 
   const getTimeElapsed = (createdAt: string) => {
     const start = new Date(createdAt).getTime();
-    const now = new Date().getTime();
-    const diff = Math.max(0, Math.floor((now - start) / 1000 / 60));    
+    const diff = Math.max(0, Math.floor((now - start) / 1000 / 60)); // Uses 'now' state
     return diff;
   };
 
@@ -123,13 +145,21 @@ export default function KitchenDisplay() {
                 {/* TICKET ITEMS */}
                 <div style={ticketBody}>
                   {ticket.items.map((item, idx) => (
-                    <div key={idx} style={{
-                      ...itemRow,
-                      textDecoration: (item.void || isVoidedTicket) ? 'line-through' : 'none',
-                      color: (item.void || isVoidedTicket) ? '#d32f2f' : '#fff'
-                    }}>
+                    <div 
+                      key={idx} 
+                      onClick={() => !isVoidedTicket && toggleItemStatus(ticket, idx)} // Tap for partial complete
+                      style={{
+                        ...itemRow,
+                        cursor: isVoidedTicket ? 'default' : 'pointer',
+                        textDecoration: (item.void || isVoidedTicket || item.status === 'READY') ? 'line-through' : 'none',
+                        color: (item.void || isVoidedTicket) ? '#d32f2f' : (item.status === 'READY' ? '#85ad4e' : '#fff'),
+                        borderLeft: item.status === 'READY' ? '5px solid #85ad4e' : 'none',
+                        opacity: item.status === 'READY' ? 0.6 : 1
+                      }}
+                    >
                       <span style={itemQty}>{item.qty}x</span>
                       <span style={itemName}>{item.name}</span>
+                      {item.status === 'READY' && <span style={{fontSize: '0.7rem', color: '#85ad4e', marginLeft: 'auto'}}>READY</span>}
                       {(item.void || isVoidedTicket) && <span style={voidTag}>VOID</span>}
                     </div>
                   ))}
