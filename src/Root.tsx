@@ -302,7 +302,7 @@ export default function Root() {
 
       setCart([]);
       setDiscountPercentage(0);
-      setSelectedTable(null); 
+      // setSelectedTable(null); // Commented out to prevent immediate redirect
       setShowReceipt(true);
     }
   };
@@ -375,6 +375,8 @@ export default function Root() {
             setShowReceipt(false);
             // Trigger refresh to update stock counts in ProductGrid
             setRefreshKey((prev) => prev + 1);
+            // New logic: Only redirect to table plan after receipt is closed
+            setSelectedTable(null); 
           }}
         />
       )}
