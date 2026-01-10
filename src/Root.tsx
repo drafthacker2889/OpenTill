@@ -28,9 +28,33 @@ export default function Root() {
   const [diningModeActive, setDiningModeActive] = useState(false); 
   const [selectedTable, setSelectedTable] = useState<string | null>(null); 
 
+  // --- NEW: Notification State ---
+  const [notification, setNotification] = useState<string | null>(null);
+
   // --- 1. Load Settings and Persistent Cart ---
   useEffect(() => {
     fetchDiningMode();
+  }, []);
+
+  // --- NEW: Notification Listener ---
+  useEffect(() => {
+    const channel = supabase
+      .channel('till_notifications')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'kitchen_tickets' },
+        (payload) => {
+          if (payload.new.status === 'COMPLETED') {
+            setNotification(`✅ Order for ${payload.new.table_number} is READY!`);
+            setTimeout(() => setNotification(null), 5000);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Every time a table is selected, load its specific saved items from DB
@@ -325,6 +349,34 @@ export default function Root() {
             setRefreshKey((prev) => prev + 1);
           }}
         />
+      )}
+
+      {/* --- NEW: Order Ready Notification Popup --- */}
+      {notification && (
+        <div style={{
+          position: 'fixed',
+          bottom: '20px',
+          right: '20px',
+          background: '#2e7d32',
+          color: 'white',
+          padding: '15px 25px',
+          borderRadius: '10px',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          fontWeight: 'bold',
+          animation: 'slideInRight 0.3s ease-out'
+        }}>
+          <span>{notification}</span>
+          <button 
+            onClick={() => setNotification(null)}
+            style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.2rem' }}
+          >
+            ×
+          </button>
+        </div>
       )}
     </div>
   );
