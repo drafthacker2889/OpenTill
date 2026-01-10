@@ -383,7 +383,7 @@ export default function Root() {
       {notification && (
         <div style={{
           position: 'fixed',
-          bottom: '20px',
+          top: '80px',
           right: '20px',
           background: '#2e7d32',
           color: 'white',

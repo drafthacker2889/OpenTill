@@ -70,7 +70,7 @@ export default function KitchenDisplay() {
   const getTimeElapsed = (createdAt: string) => {
     const start = new Date(createdAt).getTime();
     const now = new Date().getTime();
-    const diff = Math.floor((now - start) / 1000 / 60); 
+    const diff = Math.max(0, Math.floor((now - start) / 1000 / 60));    
     return diff;
   };
 
