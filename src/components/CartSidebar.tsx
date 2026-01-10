@@ -51,8 +51,8 @@ export default function CartSidebar({
                 <button 
                   onClick={() => onRemoveFromCart(item.id)}
                   style={{ 
-                    background: '#ffebee', 
-                    color: '#c62828', 
+                    background: '#eda8b2', 
+                    color: '#fb1919', 
                     border: 'none', 
                     borderRadius: '6px', 
                     width: '28px', 
@@ -61,7 +61,8 @@ export default function CartSidebar({
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center', 
-                    fontWeight: 'bold' 
+                    fontWeight: 'bold',
+                    fontSize: '16px'
                   }}
                 >
                   -
