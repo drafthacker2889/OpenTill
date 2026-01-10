@@ -22,15 +22,30 @@ export default function TableSelection({ onSelect }: Props) {
 
   const fetchTables = async () => {
     setLoading(true)
-    const { data, error } = await supabase
+    
+    // 1. Fetch the master list of tables
+    const { data: allTables, error: tableError } = await supabase
       .from('dining_tables')
       .select('*')
       .order('id', { ascending: true })
 
-    if (error) {
-      console.error("Error fetching tables:", error.message)
+    // 2. Fetch all tables that currently have active items in their cart
+    const { data: activeCarts, error: cartError } = await supabase
+      .from('table_cart_items')
+      .select('table_number')
+
+    if (tableError || cartError) {
+      console.error("Error fetching table status:", tableError?.message || cartError?.message)
     } else {
-      setTables(data || [])
+      // 3. Map through all tables and set status to OCCUPIED if their number exists in table_cart_items
+      const occupiedTableNames = new Set(activeCarts?.map(c => c.table_number));
+      
+      const updatedTables = allTables?.map(t => ({
+        ...t,
+        status: occupiedTableNames.has(t.table_number) ? 'OCCUPIED' : 'AVAILABLE'
+      })) as DiningTable[];
+
+      setTables(updatedTables || [])
     }
     setLoading(false)
   }
@@ -71,7 +86,7 @@ export default function TableSelection({ onSelect }: Props) {
             <button 
               key={table.id} 
               onClick={() => onSelect(table.table_number)}
-              disabled={table.status === 'OCCUPIED'}
+              // Note: We removed the 'disabled' attribute so you can switch back into an OCCUPIED table to add more items
               style={{ 
                 padding: '45px 20px', 
                 fontSize: '1.3rem', 
@@ -81,7 +96,7 @@ export default function TableSelection({ onSelect }: Props) {
                 borderColor: table.status === 'AVAILABLE' ? '#eee' : '#ffcdd2', 
                 background: table.status === 'AVAILABLE' ? 'white' : '#ffebee',
                 color: table.status === 'AVAILABLE' ? '#111' : '#c62828',
-                cursor: table.status === 'AVAILABLE' ? 'pointer' : 'not-allowed',
+                cursor: 'pointer',
                 transition: 'all 0.2s ease',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
                 display: 'flex',
@@ -91,18 +106,14 @@ export default function TableSelection({ onSelect }: Props) {
               }}
               // Hover effect for available tables
               onMouseOver={(e) => {
-                if (table.status === 'AVAILABLE') {
-                  e.currentTarget.style.borderColor = '#111';
-                  e.currentTarget.style.transform = 'translateY(-5px)';
-                  e.currentTarget.style.boxShadow = '0 8px 20px rgba(0,0,0,0.1)';
-                }
+                e.currentTarget.style.borderColor = '#111';
+                e.currentTarget.style.transform = 'translateY(-5px)';
+                e.currentTarget.style.boxShadow = '0 8px 20px rgba(0,0,0,0.1)';
               }}
               onMouseOut={(e) => {
-                if (table.status === 'AVAILABLE') {
-                  e.currentTarget.style.borderColor = '#eee';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)';
-                }
+                e.currentTarget.style.borderColor = table.status === 'AVAILABLE' ? '#eee' : '#ffcdd2';
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)';
               }}
             >
               {table.table_number}

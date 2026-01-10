@@ -4,7 +4,7 @@ import ProductGrid from './components/ProductGrid';
 import CartSidebar from './components/CartSidebar';
 import ReceiptModal from './components/ReceiptModal';
 import PaymentModal from './components/PaymentModal';
-import TableSelection from './components/TableSelection'; //
+import TableSelection from './components/TableSelection'; 
 import './App.css';
 
 // Type definition for items in the cart
@@ -24,81 +24,148 @@ export default function Root() {
   const [discountPercentage, setDiscountPercentage] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // --- NEW: Table Management States ---
-  const [diningModeActive, setDiningModeActive] = useState(false); //
-  const [selectedTable, setSelectedTable] = useState<string | null>(null); //
+  // --- Table Management States ---
+  const [diningModeActive, setDiningModeActive] = useState(false); 
+  const [selectedTable, setSelectedTable] = useState<string | null>(null); 
 
-  // --- Check Database Settings on Load ---
+  // --- 1. Load Settings and Persistent Cart ---
   useEffect(() => {
     fetchDiningMode();
   }, []);
+
+  // Every time a table is selected, load its specific saved items from DB
+  useEffect(() => {
+    if (selectedTable) {
+      loadTableCart();
+    } else {
+      setCart([]); // Clear local view when on floor plan
+    }
+  }, [selectedTable]);
 
   const fetchDiningMode = async () => {
     const { data } = await supabase
       .from('settings')
       .select('value')
       .eq('key', 'dining_mode')
-      .single(); //
+      .single(); 
     
     if (data) setDiningModeActive(data.value);
   };
 
-  // --- 1. Add to Cart Logic ---
-  const addToCart = (variant: any) => {
-    setCart((prevCart) => {
-      const existingItem = prevCart.find((item) => item.id === variant.id);
-      const currentQty = existingItem ? existingItem.quantity : 0;
+  const loadTableCart = async () => {
+    if (!selectedTable) return;
+    const { data } = await supabase
+      .from('table_cart_items')
+      .select('*')
+      .eq('table_number', selectedTable);
+    
+    if (data) {
+      setCart(data.map(item => ({
+        id: item.variant_id,
+        name: item.product_name,
+        price: item.price_at_addition,
+        quantity: item.quantity
+      })));
+    }
+  };
 
-      // Check stock if tracking is enabled
-      if (variant.track_stock && currentQty >= variant.stock_quantity) {
-        alert(`Sorry, only ${variant.stock_quantity} left in stock!`);
-        return prevCart;
+  // --- 2. Add to Cart Logic (Saves to Database) ---
+  const addToCart = async (variant: any) => {
+    // If Dining Mode is active, items MUST be linked to a table
+    if (diningModeActive && !selectedTable) return;
+
+    if (variant.track_stock) {
+      const existingInCart = cart.find(i => i.id === variant.id);
+      const currentQty = existingInCart ? existingInCart.quantity : 0;
+      if (currentQty >= variant.stock_quantity) {
+        return alert(`Sorry, only ${variant.stock_quantity} left in stock!`);
       }
+    }
 
-      if (existingItem) {
-        return prevCart.map((item) =>
-          item.id === variant.id ? { ...item, quantity: item.quantity + 1 } : item
-        );
+    if (diningModeActive && selectedTable) {
+      // PERSISTENT DB LOGIC: Check if item exists for this table
+      const { data: existing } = await supabase
+        .from('table_cart_items')
+        .select('*')
+        .eq('table_number', selectedTable)
+        .eq('variant_id', variant.id)
+        .single();
+
+      if (existing) {
+        await supabase.from('table_cart_items').update({ quantity: existing.quantity + 1 }).eq('id', existing.id);
       } else {
-        return [
-          ...prevCart,
-          { id: variant.id, name: variant.name, price: variant.price, quantity: 1 },
-        ];
+        await supabase.from('table_cart_items').insert({
+          table_number: selectedTable,
+          variant_id: variant.id,
+          product_name: variant.name,
+          price_at_addition: variant.price,
+          quantity: 1
+        });
+        
+        // Update table status to OCCUPIED when the first item is added
+        await supabase.from('dining_tables').update({ status: 'OCCUPIED' }).eq('table_number', selectedTable);
       }
-    });
+      loadTableCart(); // Sync UI with DB
+    } else {
+      // Fallback for Quick Service (Local State only)
+      setCart((prevCart) => {
+        const existingItem = prevCart.find((item) => item.id === variant.id);
+        if (existingItem) {
+          return prevCart.map((item) => item.id === variant.id ? { ...item, quantity: item.quantity + 1 } : item);
+        } else {
+          return [...prevCart, { id: variant.id, name: variant.name, price: variant.price, quantity: 1 }];
+        }
+      });
+    }
   };
 
-  // --- 2. Remove from Cart Logic ---
-  const removeFromCart = (variantId: string) => {
-    setCart((prevCart) => {
-      const existingItem = prevCart.find((item) => item.id === variantId);
-      if (!existingItem) return prevCart;
+  // --- 3. Remove from Cart Logic (Syncs with DB) ---
+  const removeFromCart = async (variantId: string) => {
+    if (diningModeActive && selectedTable) {
+      const { data: existing } = await supabase
+        .from('table_cart_items')
+        .select('*')
+        .eq('table_number', selectedTable)
+        .eq('variant_id', variantId)
+        .single();
 
-      if (existingItem.quantity === 1) {
-        return prevCart.filter((item) => item.id !== variantId);
+      if (existing) {
+        if (existing.quantity <= 1) {
+          await supabase.from('table_cart_items').delete().eq('id', existing.id);
+          
+          // Check if table is now empty to revert status to AVAILABLE
+          const { data: remaining } = await supabase.from('table_cart_items').select('id').eq('table_number', selectedTable);
+          if (!remaining || remaining.length === 0) {
+             await supabase.from('dining_tables').update({ status: 'AVAILABLE' }).eq('table_number', selectedTable);
+          }
+        } else {
+          await supabase.from('table_cart_items').update({ quantity: existing.quantity - 1 }).eq('id', existing.id);
+        }
       }
-      return prevCart.map((item) =>
-        item.id === variantId ? { ...item, quantity: item.quantity - 1 } : item
-      );
-    });
+      loadTableCart();
+    } else {
+      setCart((prevCart) => {
+        const existingItem = prevCart.find((item) => item.id === variantId);
+        if (!existingItem) return prevCart;
+        if (existingItem.quantity === 1) return prevCart.filter((item) => item.id !== variantId);
+        return prevCart.map((item) => item.id === variantId ? { ...item, quantity: item.quantity - 1 } : item);
+      });
+    }
   };
 
-  // --- 3. Checkout Initiation ---
+  // --- 4. Checkout Initiation ---
   const handleInitiateCheckout = () => {
     if (cart.length === 0) return alert("Cart is empty!");
     setShowPayment(true);
   };
 
-  // --- 4. Confirm Payment & Database Sync ---
+  // --- 5. Confirm Payment & Clear Table Persistence ---
   const handleConfirmPayment = async (method: 'CASH' | 'CARD', tipAmount: number) => {
     setShowPayment(false);
-
-    // Financial Calculations
     const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const discountAmount = Math.round(subtotal * (discountPercentage / 100));
     const totalAmount = subtotal - discountAmount + tipAmount;
 
-    // Supabase Payload
     const payload = {
       totalAmount: totalAmount,
       paymentMethod: method,
@@ -110,14 +177,17 @@ export default function Root() {
       })),
     };
 
-    // Call Database RPC
     const { data, error } = await supabase.rpc('sell_items', { order_payload: payload });
 
     if (error) {
-      console.error("Checkout Failed:", error);
-      alert("Transaction Failed! Check console for details.");
+      alert("Transaction Failed!");
     } else {
-      // Save order details for the receipt
+      // IF DINING MODE: Clear the saved items and reset table status to AVAILABLE
+      if (selectedTable) {
+        await supabase.from('table_cart_items').delete().eq('table_number', selectedTable);
+        await supabase.from('dining_tables').update({ status: 'AVAILABLE' }).eq('table_number', selectedTable);
+      }
+
       setLastOrder({
         id: data.order_id,
         subtotal: subtotal,
@@ -128,16 +198,14 @@ export default function Root() {
         method: method,
       });
 
-      // Reset application state
       setCart([]);
       setDiscountPercentage(0);
-      setSelectedTable(null); // Reset table after payment is complete
+      setSelectedTable(null); 
       setShowReceipt(true);
     }
   };
 
   // --- Conditional Rendering for Dining Mode ---
-  // Show TableSelection if dining mode is ON and no table is currently active
   if (diningModeActive && !selectedTable) {
     return <TableSelection onSelect={(table) => setSelectedTable(table)} />;
   }
@@ -145,7 +213,7 @@ export default function Root() {
   return (
     <div className="content-wrapper">
       <div className="main-section">
-        {/* Table Serving Header */}
+        {/* Table Serving Header - Now supports switching without data loss */}
         {selectedTable && (
           <div style={{ 
             display: 'flex', 
@@ -159,11 +227,7 @@ export default function Root() {
           }}>
             <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>📍 Serving: {selectedTable}</span>
             <button 
-              onClick={() => {
-                if (cart.length > 0 && !confirm("Discard current cart to switch table?")) return;
-                setCart([]);
-                setSelectedTable(null);
-              }} 
+              onClick={() => setSelectedTable(null)} 
               style={{ padding: '8px 15px', background: '#eee', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
             >
               Switch Table
@@ -171,7 +235,6 @@ export default function Root() {
           </div>
         )}
 
-        {/* The refreshKey forces the grid to re-fetch stock after a sale */}
         <ProductGrid key={refreshKey} onAddToCart={addToCart} />
       </div>
 
@@ -185,7 +248,6 @@ export default function Root() {
         />
       </div>
 
-      {/* PAYMENT MODAL */}
       {showPayment && (
         <PaymentModal
           subtotal={
@@ -197,7 +259,6 @@ export default function Root() {
         />
       )}
 
-      {/* RECEIPT MODAL */}
       {showReceipt && lastOrder && (
         <ReceiptModal
           orderId={lastOrder.id}
