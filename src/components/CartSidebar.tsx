@@ -6,6 +6,7 @@ interface Props {
   onRemoveFromCart: (id: string) => void
   discountPercentage: number
   onSetDiscount: (val: number) => void
+  onSendToKitchen: () => void // New prop for kitchen routing
 }
 
 export default function CartSidebar({ 
@@ -13,13 +14,17 @@ export default function CartSidebar({
   onCheckout, 
   onRemoveFromCart, 
   discountPercentage, 
-  onSetDiscount 
+  onSetDiscount,
+  onSendToKitchen //
 }: Props) {
   
   // Calculate Math
   const subtotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
   const discountAmount = Math.round(subtotal * (discountPercentage / 100))
   const finalTotal = subtotal - discountAmount
+
+  // Helper to check for new items that haven't been "Sent" yet
+  const hasNewItems = cartItems.some(item => (item as any).status === 'DRAFT' || !(item as any).status)
 
   return (
     <div className="sidebar-section">
@@ -44,7 +49,8 @@ export default function CartSidebar({
                 alignItems: 'center', 
                 marginBottom: '12px', 
                 paddingBottom: '12px', 
-                borderBottom: '1px solid #f0f0f0' 
+                borderBottom: '1px solid #f0f0f0',
+                opacity: (item as any).status === 'SENT' ? 0.7 : 1 // Visual feedback for sent items
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -68,7 +74,10 @@ export default function CartSidebar({
                   -
                 </button>
                 <div>
-                  <div style={{ fontWeight: 'bold' }}>{item.name}</div>
+                  <div style={{ fontWeight: 'bold' }}>
+                    {item.name} 
+                    {(item as any).status === 'SENT' && <span style={{ marginLeft: '8px', color: '#2e7d32', fontSize: '0.7rem' }}>✓ Sent</span>}
+                  </div>
                   <div style={{ fontSize: '0.85rem', color: '#888' }}>x{item.quantity}</div>
                 </div>
               </div>
@@ -83,6 +92,28 @@ export default function CartSidebar({
       {/* --- BOTTOM SECTION (Fixed at bottom) --- */}
       <div className="order-summary-footer">
         
+        {/* NEW: Kitchen Action Button */}
+        {cartItems.length > 0 && (
+          <button 
+            onClick={onSendToKitchen}
+            disabled={!hasNewItems}
+            style={{ 
+              width: '100%', 
+              padding: '12px', 
+              background: hasNewItems ? '#2e7d32' : '#eee', 
+              color: hasNewItems ? 'white' : '#aaa', 
+              borderRadius: '8px', 
+              border: 'none', 
+              fontWeight: 'bold', 
+              marginBottom: '15px',
+              cursor: hasNewItems ? 'pointer' : 'not-allowed',
+              transition: '0.2s'
+            }}
+          >
+            🍳 {hasNewItems ? 'Send New Items to Kitchen' : 'All Items Sent to Kitchen'}
+          </button>
+        )}
+
         {/* Discount Toggles */}
         <div style={{ marginBottom: '20px' }}>
           <p style={{ 

@@ -64,7 +64,8 @@ export default function Root() {
         id: item.variant_id,
         name: item.product_name,
         price: item.price_at_addition,
-        quantity: item.quantity
+        quantity: item.quantity,
+        status: item.status //
       })));
     }
   };
@@ -83,12 +84,13 @@ export default function Root() {
     }
 
     if (diningModeActive && selectedTable) {
-      // PERSISTENT DB LOGIC: Check if item exists for this table
+      // PERSISTENT DB LOGIC: Check if item exists for this table and is still in DRAFT status
       const { data: existing } = await supabase
         .from('table_cart_items')
         .select('*')
         .eq('table_number', selectedTable)
         .eq('variant_id', variant.id)
+        .eq('status', 'DRAFT') // Only update quantity if it hasn't been sent to kitchen yet
         .single();
 
       if (existing) {
@@ -99,7 +101,8 @@ export default function Root() {
           variant_id: variant.id,
           product_name: variant.name,
           price_at_addition: variant.price,
-          quantity: 1
+          quantity: 1,
+          status: 'DRAFT' // Initial status is DRAFT
         });
         
         // Update table status to OCCUPIED when the first item is added
@@ -122,14 +125,28 @@ export default function Root() {
   // --- 3. Remove from Cart Logic (Syncs with DB) ---
   const removeFromCart = async (variantId: string) => {
     if (diningModeActive && selectedTable) {
+      // Fetch the most recent addition for this variant at this table
       const { data: existing } = await supabase
         .from('table_cart_items')
         .select('*')
         .eq('table_number', selectedTable)
         .eq('variant_id', variantId)
+        .order('created_at', { ascending: false })
+        .limit(1)
         .single();
 
       if (existing) {
+        // Handle Voids for items already sent to kitchen
+        if (existing.status === 'SENT') {
+          if (!confirm("This item was already sent to the kitchen. Void it?")) return;
+          
+          await supabase.from('kitchen_tickets').insert({
+            table_number: selectedTable,
+            items: [{ name: existing.product_name, qty: existing.quantity, void: true }],
+            status: 'VOIDED'
+          });
+        }
+
         if (existing.quantity <= 1) {
           await supabase.from('table_cart_items').delete().eq('id', existing.id);
           
@@ -151,6 +168,39 @@ export default function Root() {
         return prevCart.map((item) => item.id === variantId ? { ...item, quantity: item.quantity - 1 } : item);
       });
     }
+  };
+
+  // --- NEW: Kitchen Routing Logic ---
+  const handleSendToKitchen = async () => {
+    if (!selectedTable) return;
+
+    // 1. Fetch only items marked as DRAFT
+    const { data: draftItems } = await supabase
+      .from('table_cart_items')
+      .select('*')
+      .eq('table_number', selectedTable)
+      .eq('status', 'DRAFT');
+
+    if (!draftItems || draftItems.length === 0) return alert("No new items to send.");
+
+    // 2. Create the Kitchen Ticket record
+    const { error: ticketError } = await supabase.from('kitchen_tickets').insert({
+      table_number: selectedTable,
+      items: draftItems.map(i => ({ name: i.product_name, qty: i.quantity })),
+      status: 'PENDING'
+    });
+
+    if (ticketError) return alert("Kitchen Routing Failed: " + ticketError.message);
+
+    // 3. Update those items to SENT status so they aren't sent again
+    await supabase
+      .from('table_cart_items')
+      .update({ status: 'SENT' })
+      .eq('table_number', selectedTable)
+      .eq('status', 'DRAFT');
+
+    loadTableCart();
+    alert("Order fired to kitchen!");
   };
 
   // --- 4. Checkout Initiation ---
@@ -245,6 +295,7 @@ export default function Root() {
           onRemoveFromCart={removeFromCart}
           discountPercentage={discountPercentage}
           onSetDiscount={setDiscountPercentage}
+          onSendToKitchen={handleSendToKitchen} //
         />
       </div>
 
