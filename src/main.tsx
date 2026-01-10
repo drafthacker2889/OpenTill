@@ -4,6 +4,7 @@ import { supabase } from './supabaseClient'
 import Root from './Root'
 import AdminDashboard from './AdminDashboard'
 import Login from './components/Login'
+import KitchenDisplay from './components/KitchenDisplay' // New: KDS Screen
 import './App.css'
 
 function App() {
@@ -53,6 +54,11 @@ function App() {
   if (!session) return <Login />
 
   const path = window.location.pathname
+
+  // KITCHEN PAGE ROUTE
+  if (path === '/kitchen') {
+    return <KitchenDisplay />
+  }
 
   // ADMIN PAGE ACCESS CONTROL
   if (path === '/admin') {

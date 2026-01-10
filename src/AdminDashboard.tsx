@@ -11,6 +11,7 @@ export default function AdminDashboard() {
   
   // NEW: Settings State
   const [diningMode, setDiningMode] = useState(false)
+  const [kitchenMode, setKitchenMode] = useState(false) // New: KDS Toggle State
 
   // State for the Receipt Modal
   const [selectedReceiptOrder, setSelectedReceiptOrder] = useState<any>(null)
@@ -39,8 +40,13 @@ export default function AdminDashboard() {
 
   // --- DATA FETCHING ---
   const fetchSettings = async () => {
-    const { data } = await supabase.from('settings').select('*').eq('key', 'dining_mode').single()
-    if (data) setDiningMode(data.value)
+    // Fetch Dining Mode
+    const { data: diningData } = await supabase.from('settings').select('*').eq('key', 'dining_mode').single()
+    if (diningData) setDiningMode(diningData.value)
+
+    // Fetch Kitchen Display Mode
+    const { data: kitchenData } = await supabase.from('settings').select('*').eq('key', 'kitchen_display_active').single()
+    if (kitchenData) setKitchenMode(kitchenData.value)
   }
 
   const fetchVariants = async () => {
@@ -94,6 +100,22 @@ export default function AdminDashboard() {
       setDiningMode(!val) // Revert UI if DB fails
     } else {
       alert(`Dining Mode ${val ? 'Enabled' : 'Disabled'}. Table selection will now be ${val ? 'required' : 'skipped'} on the Till.`)
+    }
+  }
+
+  // New: Toggle Kitchen Display System
+  const handleToggleKitchenMode = async (val: boolean) => {
+    setKitchenMode(val)
+    const { error } = await supabase
+      .from('settings')
+      .update({ value: val })
+      .eq('key', 'kitchen_display_active')
+    
+    if (error) {
+      alert("Failed to update kitchen setting: " + error.message)
+      setKitchenMode(!val)
+    } else {
+      alert(`Kitchen Display ${val ? 'Enabled' : 'Disabled'}. dedicated /kitchen route is now ${val ? 'active' : 'inactive'}.`)
     }
   }
 
@@ -346,30 +368,62 @@ export default function AdminDashboard() {
               borderRadius: '12px', 
               border: '1px solid #eee',
               display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
+              flexDirection: 'column', // Modified to stack settings
+              gap: '20px'
             }}>
-              <div>
-                <h4 style={{ margin: '0 0 5px 0', fontSize: '1.1rem' }}>Dining Mode (Table Management)</h4>
-                <p style={{ margin: 0, color: '#777', fontSize: '0.9rem' }}>
-                  When enabled, cashiers will be prompted to select a table before starting an order.
-                </p>
+              {/* Dining Mode Toggle */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h4 style={{ margin: '0 0 5px 0', fontSize: '1.1rem' }}>Dining Mode (Table Management)</h4>
+                  <p style={{ margin: 0, color: '#777', fontSize: '0.9rem' }}>
+                    When enabled, cashiers will be prompted to select a table before starting an order.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                  <span style={{ fontWeight: 'bold', color: diningMode ? '#2e7d32' : '#c62828' }}>
+                    {diningMode ? 'ACTIVE' : 'INACTIVE'}
+                  </span>
+                  <input 
+                    type="checkbox" 
+                    checked={diningMode} 
+                    onChange={(e) => handleToggleDiningMode(e.target.checked)}
+                    style={{ width: '25px', height: '25px', cursor: 'pointer' }}
+                  />
+                </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                <span style={{ fontWeight: 'bold', color: diningMode ? '#2e7d32' : '#c62828' }}>
-                  {diningMode ? 'ACTIVE' : 'INACTIVE'}
-                </span>
-                <input 
-                  type="checkbox" 
-                  checked={diningMode} 
-                  onChange={(e) => handleToggleDiningMode(e.target.checked)}
-                  style={{ width: '25px', height: '25px', cursor: 'pointer' }}
-                />
+
+              {/* Kitchen Display System Toggle */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #eee', paddingTop: '20px' }}>
+                <div>
+                  <h4 style={{ margin: '0 0 5px 0', fontSize: '1.1rem' }}>Kitchen Display System (KDS)</h4>
+                  <p style={{ margin: 0, color: '#777', fontSize: '0.9rem' }}>
+                    Enable a dedicated view for kitchen staff to monitor incoming orders.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                  <span style={{ fontWeight: 'bold', color: kitchenMode ? '#2e7d32' : '#c62828' }}>
+                    {kitchenMode ? 'ACTIVE' : 'INACTIVE'}
+                  </span>
+                  <input 
+                    type="checkbox" 
+                    checked={kitchenMode} 
+                    onChange={(e) => handleToggleKitchenMode(e.target.checked)}
+                    style={{ width: '25px', height: '25px', cursor: 'pointer' }}
+                  />
+                </div>
               </div>
+              
+              {kitchenMode && (
+                <div style={{ marginTop: '10px', background: '#e3f2fd', padding: '15px', borderRadius: '8px', border: '1px solid #bbdefb' }}>
+                  <a href="/kitchen" target="_blank" style={{ color: '#1565c0', fontWeight: 'bold', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    🖥️ Open Kitchen Display Screen ↗
+                  </a>
+                </div>
+              )}
             </div>
             
             <div style={{ marginTop: '40px', padding: '20px', background: '#fff9c4', borderRadius: '8px', border: '1px solid #fff176', fontSize: '0.85rem', color: '#827717' }}>
-              <strong>Note:</strong> Disabling Dining Mode will hide the Table Selection screen for all staff immediately.
+              <strong>Note:</strong> Settings changed here take effect across all POS terminals immediately.
             </div>
           </div>
         )}
