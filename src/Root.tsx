@@ -164,11 +164,22 @@ export default function Root() {
         if (existing.status === 'SENT') {
           if (!confirm("This item was already sent to the kitchen. Void it?")) return;
           
-          await supabase.from('kitchen_tickets').insert({
-            table_number: selectedTable,
-            items: [{ name: existing.product_name, qty: existing.quantity, void: true }],
-            status: 'VOIDED'
-          });
+          // Find the active kitchen ticket to mark it as VOIDED on the card
+          const { data: activeTicket } = await supabase
+            .from('kitchen_tickets')
+            .select('*')
+            .eq('table_number', selectedTable)
+            .eq('status', 'PENDING')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+          if (activeTicket) {
+            const updatedItems = activeTicket.items.map((i: any) => 
+              i.name === existing.product_name ? { ...i, void: true } : i
+            );
+            await supabase.from('kitchen_tickets').update({ items: updatedItems }).eq('id', activeTicket.id);
+          }
         }
 
         if (existing.quantity <= 1) {
@@ -194,7 +205,7 @@ export default function Root() {
     }
   };
 
-  // --- NEW: Kitchen Routing Logic ---
+  // --- NEW: Kitchen Routing Logic (Updated for Single Ticket Merging) ---
   const handleSendToKitchen = async () => {
     if (!selectedTable) return;
 
@@ -207,14 +218,31 @@ export default function Root() {
 
     if (!draftItems || draftItems.length === 0) return alert("No new items to send.");
 
-    // 2. Create the Kitchen Ticket record
-    const { error: ticketError } = await supabase.from('kitchen_tickets').insert({
-      table_number: selectedTable,
-      items: draftItems.map(i => ({ name: i.product_name, qty: i.quantity })),
-      status: 'PENDING'
-    });
+    // 2. Check for active ticket to merge
+    const { data: activeTicket } = await supabase
+      .from('kitchen_tickets')
+      .select('*')
+      .eq('table_number', selectedTable)
+      .eq('status', 'PENDING')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
 
-    if (ticketError) return alert("Kitchen Routing Failed: " + ticketError.message);
+    if (activeTicket) {
+      const mergedItems = [
+        ...activeTicket.items,
+        ...draftItems.map(i => ({ name: i.product_name, qty: i.quantity, status: 'PENDING' }))
+      ];
+      await supabase.from('kitchen_tickets').update({ items: mergedItems }).eq('id', activeTicket.id);
+    } else {
+      // Create new ticket record
+      const { error: ticketError } = await supabase.from('kitchen_tickets').insert({
+        table_number: selectedTable,
+        items: draftItems.map(i => ({ name: i.product_name, qty: i.quantity, status: 'PENDING' })),
+        status: 'PENDING'
+      });
+      if (ticketError) return alert("Kitchen Routing Failed: " + ticketError.message);
+    }
 
     // 3. Update those items to SENT status so they aren't sent again
     await supabase
@@ -224,7 +252,7 @@ export default function Root() {
       .eq('status', 'DRAFT');
 
     loadTableCart();
-    alert("Order fired to kitchen!");
+    alert("Kitchen order updated!");
   };
 
   // --- 4. Checkout Initiation ---
