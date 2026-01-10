@@ -9,6 +9,9 @@ export default function AdminDashboard() {
   const [staff, setStaff] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   
+  // NEW: Settings State
+  const [diningMode, setDiningMode] = useState(false)
+
   // State for the Receipt Modal
   const [selectedReceiptOrder, setSelectedReceiptOrder] = useState<any>(null)
 
@@ -26,12 +29,20 @@ export default function AdminDashboard() {
   const [newRole, setNewRole] = useState('cashier')
 
   useEffect(() => {
+    // Initial fetch for settings
+    fetchSettings()
+
     if (activeTab === 'inventory') fetchVariants()
     else if (activeTab === 'sales') fetchOrders()
-    else fetchStaff()
+    else if (activeTab === 'staff') fetchStaff()
   }, [activeTab])
 
   // --- DATA FETCHING ---
+  const fetchSettings = async () => {
+    const { data } = await supabase.from('settings').select('*').eq('key', 'dining_mode').single()
+    if (data) setDiningMode(data.value)
+  }
+
   const fetchVariants = async () => {
     setLoading(true)
     const { data } = await supabase
@@ -44,7 +55,6 @@ export default function AdminDashboard() {
 
   const fetchOrders = async () => {
     setLoading(true)
-    // FIX: Added all necessary fields for the ReceiptModal
     const { data, error } = await supabase
       .from('orders')
       .select(`
@@ -71,11 +81,25 @@ export default function AdminDashboard() {
     setLoading(false)
   }
 
-  // --- VOID ORDER LOGIC ---
+  // --- ACTIONS ---
+  const handleToggleDiningMode = async (val: boolean) => {
+    setDiningMode(val)
+    const { error } = await supabase
+      .from('settings')
+      .update({ value: val })
+      .eq('key', 'dining_mode')
+    
+    if (error) {
+      alert("Failed to update setting: " + error.message)
+      setDiningMode(!val) // Revert UI if DB fails
+    } else {
+      alert(`Dining Mode ${val ? 'Enabled' : 'Disabled'}. Table selection will now be ${val ? 'required' : 'skipped'} on the Till.`)
+    }
+  }
+
   const handleVoidOrder = async (order: any) => {
     if (!confirm("Void this order? Revenue will be deducted and stock will be returned.")) return;
 
-    // We keep the original total_amount but change status to VOIDED for reporting
     const { error: updateError } = await supabase
       .from('orders')
       .update({ status: 'VOIDED' })
@@ -83,7 +107,6 @@ export default function AdminDashboard() {
 
     if (updateError) return alert("Void failed: " + updateError.message);
 
-    // Stock Reconciliation
     for (const item of order.order_items) {
       if (item.variant_id) {
         const { data: v } = await supabase.from('variants').select('stock_quantity, track_stock').eq('id', item.variant_id).single();
@@ -106,7 +129,6 @@ export default function AdminDashboard() {
     return matchesDate && matchesSearch;
   });
 
-  // Financial summary excluding VOIDED orders
   const dailyTotal = filteredOrders
     .filter(o => o.status !== 'VOIDED')
     .reduce((sum, o) => sum + (o.total_amount || 0), 0) / 100;
@@ -123,7 +145,6 @@ export default function AdminDashboard() {
 
   const maxWeeklyTotal = Math.max(...last7Days.map(d => d.total), 1);
 
-  // --- INVENTORY ACTIONS ---
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newName || !newPrice) return alert("Please fill in Name and Price")
@@ -175,14 +196,14 @@ export default function AdminDashboard() {
            <h1 style={{ margin: 0 }}>📦 Admin Portal</h1>
            <p style={{ margin: 0, color: '#666', fontSize: '0.9rem' }}>Real-time management for OpenTill POS.</p>
         </div>
-        <a href="/" style={{ padding: '10px 20px', background: '#333', color: 'white', textDecoration: 'none', borderRadius: '8px', fontWeight: 'bold' }}>
+        <a href="/" style={{ padding: '10px 20px', background: '#333', color: 'white', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold' }}>
           ← Back to Till
         </a>
       </div>
 
       {/* TABS */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '25px' }}>
-        {['inventory', 'sales', 'staff'].map(tab => (
+        {['inventory', 'sales', 'staff', 'settings'].map(tab => (
           <button 
             key={tab} 
             onClick={() => setActiveTab(tab)} 
@@ -237,7 +258,6 @@ export default function AdminDashboard() {
 
         ) : activeTab === 'sales' ? (
           <div style={{ padding: '25px' }}>
-            {/* WEEKLY TREND CHART */}
             <div style={{ marginBottom: '30px', padding: '20px', background: '#fff', border: '1px solid #eee', borderRadius: '10px' }}>
               <h3 style={{ margin: '0 0 20px 0', fontSize: '1rem' }}>Revenue Trends (Last 7 Days)</h3>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: '15px', height: '120px' }}>
@@ -251,7 +271,6 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* SEARCH & FILTERS */}
             <div style={{ display: 'flex', gap: '15px', marginBottom: '25px', alignItems: 'flex-end' }}>
                <div style={{ flex: 1 }}>
                   <label style={labelStyle}>Search History</label>
@@ -267,7 +286,6 @@ export default function AdminDashboard() {
                </div>
             </div>
 
-            {/* SALES TABLE */}
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ textAlign: 'left', background: '#fafafa', borderBottom: '2px solid #eee' }}>
@@ -299,7 +317,8 @@ export default function AdminDashboard() {
               </tbody>
             </table>
           </div>
-        ) : (
+
+        ) : activeTab === 'staff' ? (
           <div style={{ padding: '20px' }}>
             <div style={{ background: '#f9f9f9', padding: '20px', borderRadius: '8px', marginBottom: '25px', border: '1px solid #eee' }}>
               <h3>Staff Directory</h3>
@@ -313,6 +332,45 @@ export default function AdminDashboard() {
               <thead><tr style={{ textAlign: 'left', background: '#fafafa' }}><th style={thStyle}>Email</th><th style={thStyle}>Role</th></tr></thead>
               <tbody>{staff.map(s => <tr key={s.id} style={{ borderBottom: '1px solid #eee' }}><td style={tdStyle}>{s.email}</td><td style={tdStyle}>{s.role.toUpperCase()}</td></tr>)}</tbody>
             </table>
+          </div>
+
+        ) : (
+          /* SETTINGS TAB */
+          <div style={{ padding: '40px' }}>
+            <h2 style={{ marginTop: 0 }}>System Settings</h2>
+            <p style={{ color: '#666', marginBottom: '30px' }}>Configure global features for the POS system.</p>
+            
+            <div style={{ 
+              background: '#f9f9f9', 
+              padding: '30px', 
+              borderRadius: '12px', 
+              border: '1px solid #eee',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div>
+                <h4 style={{ margin: '0 0 5px 0', fontSize: '1.1rem' }}>Dining Mode (Table Management)</h4>
+                <p style={{ margin: 0, color: '#777', fontSize: '0.9rem' }}>
+                  When enabled, cashiers will be prompted to select a table before starting an order.
+                </p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                <span style={{ fontWeight: 'bold', color: diningMode ? '#2e7d32' : '#c62828' }}>
+                  {diningMode ? 'ACTIVE' : 'INACTIVE'}
+                </span>
+                <input 
+                  type="checkbox" 
+                  checked={diningMode} 
+                  onChange={(e) => handleToggleDiningMode(e.target.checked)}
+                  style={{ width: '25px', height: '25px', cursor: 'pointer' }}
+                />
+              </div>
+            </div>
+            
+            <div style={{ marginTop: '40px', padding: '20px', background: '#fff9c4', borderRadius: '8px', border: '1px solid #fff176', fontSize: '0.85rem', color: '#827717' }}>
+              <strong>Note:</strong> Disabling Dining Mode will hide the Table Selection screen for all staff immediately.
+            </div>
           </div>
         )}
       </div>

@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import ProductGrid from './components/ProductGrid';
 import CartSidebar from './components/CartSidebar';
 import ReceiptModal from './components/ReceiptModal';
 import PaymentModal from './components/PaymentModal';
+import TableSelection from './components/TableSelection'; //
 import './App.css';
 
 // Type definition for items in the cart
@@ -22,6 +23,25 @@ export default function Root() {
   const [lastOrder, setLastOrder] = useState<any>(null);
   const [discountPercentage, setDiscountPercentage] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // --- NEW: Table Management States ---
+  const [diningModeActive, setDiningModeActive] = useState(false); //
+  const [selectedTable, setSelectedTable] = useState<string | null>(null); //
+
+  // --- Check Database Settings on Load ---
+  useEffect(() => {
+    fetchDiningMode();
+  }, []);
+
+  const fetchDiningMode = async () => {
+    const { data } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'dining_mode')
+      .single(); //
+    
+    if (data) setDiningModeActive(data.value);
+  };
 
   // --- 1. Add to Cart Logic ---
   const addToCart = (variant: any) => {
@@ -111,13 +131,46 @@ export default function Root() {
       // Reset application state
       setCart([]);
       setDiscountPercentage(0);
+      setSelectedTable(null); // Reset table after payment is complete
       setShowReceipt(true);
     }
   };
 
+  // --- Conditional Rendering for Dining Mode ---
+  // Show TableSelection if dining mode is ON and no table is currently active
+  if (diningModeActive && !selectedTable) {
+    return <TableSelection onSelect={(table) => setSelectedTable(table)} />;
+  }
+
   return (
     <div className="content-wrapper">
       <div className="main-section">
+        {/* Table Serving Header */}
+        {selectedTable && (
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            marginBottom: '20px', 
+            padding: '15px', 
+            background: '#fff', 
+            borderRadius: '8px', 
+            border: '1px solid #ddd' 
+          }}>
+            <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>📍 Serving: {selectedTable}</span>
+            <button 
+              onClick={() => {
+                if (cart.length > 0 && !confirm("Discard current cart to switch table?")) return;
+                setCart([]);
+                setSelectedTable(null);
+              }} 
+              style={{ padding: '8px 15px', background: '#eee', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+            >
+              Switch Table
+            </button>
+          </div>
+        )}
+
         {/* The refreshKey forces the grid to re-fetch stock after a sale */}
         <ProductGrid key={refreshKey} onAddToCart={addToCart} />
       </div>
