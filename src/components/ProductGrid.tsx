@@ -196,7 +196,7 @@ export default function ProductGrid({ onAddToCart, branchId }: Props) {
 
                 {/* Variant Purchase Buttons */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {product.variants.map((variant) => {
+                  {product.variants.map((variant: any) => {
                     const isOutOfStock = variant.track_stock && variant.stock_quantity <= 0
                     
                     return (

@@ -65,9 +65,10 @@ export default function Root({ userRole }: RootProps) {
     // For now, we just grab the first branch available. 
     // In a real multi-unit setup, this would be a selection screen or stored in localStorage.
     const { data: branches } = await supabase.from('branches').select('id, name').limit(1);
-    if (branches && branches.length > 0) {
-      setCurrentBranchId(branches[0].id);
-      console.log("Active Branch:", branches[0].name);
+    const branch = branches?.[0];
+    if (branch) {
+      setCurrentBranchId(branch.id);
+      console.log("Active Branch:", branch.name);
     }
   };
 
@@ -420,7 +421,7 @@ export default function Root({ userRole }: RootProps) {
     // --- GIFT CARD LOGIC START ---
     let giftCardCode = "";
     if (method.startsWith('GIFT_CARD:')) {
-        giftCardCode = method.split(':')[1];
+        giftCardCode = method.split(':')[1] || '';
         // 1. Process Payment First (Secure Funds)
         const { error: gcError } = await supabase.rpc('process_gift_card_payment', {
             card_code_input: giftCardCode,

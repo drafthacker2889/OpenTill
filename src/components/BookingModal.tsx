@@ -14,7 +14,7 @@ export default function BookingModal({ onClose, onSuccess }: Props) {
   // Form State
   const [customerName, setCustomerName] = useState('');
   const [partySize, setPartySize] = useState(2);
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0] || '');
   const [time, setTime] = useState('19:00');
   
   // UI State

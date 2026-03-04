@@ -1,5 +1,5 @@
-import { CartItem } from '../Root'
-import { TFunction } from 'i18next'; // Type for translation function
+import type { CartItem } from '../Root'
+import type { TFunction } from 'i18next'; // Type for translation function
 
 interface Props {
   cartItems: CartItem[]

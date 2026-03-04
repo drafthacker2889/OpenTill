@@ -36,7 +36,7 @@ export default function ShiftManager() {
             setLoading(false);
             return;
         }
-        const bId = branches[0].id;
+        const bId = branches[0]!.id;
         setBranchId(bId);
 
         // 2. Get Open Shift

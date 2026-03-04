@@ -43,7 +43,7 @@ export default function AdminDashboard() {
   const [selectedReceiptOrder, setSelectedReceiptOrder] = useState<any>(null)
 
   // FILTER & SEARCH STATES
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0] ?? '');
   const [orderSearch, setOrderSearch] = useState('');
 
   const [salesData, setSalesData] = useState<any[]>([])
@@ -61,7 +61,7 @@ export default function AdminDashboard() {
 
   // BOOKING FORM STATE
   const [bookingName, setBookingName] = useState('')
-  const [bookingDate, setBookingDate] = useState(new Date().toISOString().split('T')[0])
+  const [bookingDate, setBookingDate] = useState(new Date().toISOString().split('T')[0] ?? '')
   const [bookingTime, setBookingTime] = useState('19:00')
   const [bookingGuests, setBookingGuests] = useState(2)
   const [bookingPhone, setBookingPhone] = useState('')
@@ -106,6 +106,7 @@ export default function AdminDashboard() {
 
   const fetchAnalytics = async () => {
     // 6. 🕒 Timezone Fix: Create absolute date boundaries for local day
+    if (!selectedDate) return;
     const localStart = new Date(selectedDate);
     localStart.setHours(0, 0, 0, 0);
     const start = localStart.toISOString();
@@ -139,7 +140,9 @@ export default function AdminDashboard() {
         const date = new Date(order.created_at);
         if (isNaN(date.getTime())) return;
         const hour = date.getHours()
-        hours[hour].sales += (order.total_amount || 0)
+        if (hours[hour]) {
+            hours[hour].sales += (order.total_amount || 0)
+        }
       })
       
       setSalesData(hours.filter(h => h.sales > 0)) // Only show active hours

@@ -53,7 +53,7 @@ export default function KitchenDisplay() {
   const fetchBranchAndTickets = async () => {
     // Fetch Branch context similar to Root.tsx
     const { data: branches } = await supabase.from('branches').select('id').limit(1);
-    if (branches && branches.length > 0) {
+    if (branches && branches[0]) {
         setBranchId(branches[0].id);
         fetchActiveTickets(branches[0].id);
     } else {
@@ -96,6 +96,8 @@ export default function KitchenDisplay() {
     if (!branchId && !ticket.is_offline) return; 
 
     const newItems = [...ticket.items];
+    if (!newItems[itemIndex]) return; 
+
     const currentStatus = newItems[itemIndex].status;
     
     // Toggle between PENDING and READY

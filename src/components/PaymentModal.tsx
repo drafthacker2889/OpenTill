@@ -173,7 +173,8 @@ export default function PaymentModal({ subtotal, onCreatePendingOrder, onConfirm
                       <div 
                         key={c.id} 
                         onClick={() => { setSelectedCustomer(c); setCustomerSearch(''); setCustomers([]); }}
-                        style={{ padding: '10px', borderBottom: '1px solid #eee', cursor: 'pointer', hover: { background: '#f5f5f5' } }}
+                        className="customer-search-result"
+                        style={{ padding: '10px', borderBottom: '1px solid #eee', cursor: 'pointer' }}
                       >
                         <div style={{ fontWeight: 'bold' }}>{c.name}</div>
                         <div style={{ fontSize: '0.8rem', color: '#666' }}>{c.phone} • {c.loyalty_points} pts</div>
