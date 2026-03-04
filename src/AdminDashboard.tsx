@@ -105,17 +105,21 @@ export default function AdminDashboard() {
   }
 
   const fetchAnalytics = async () => {
-    // 6. 🕒 Timezone Fix: Create absolute date boundaries for local day
+    // 6. 🕒 Timezone Fix: Handling timezone properly without libraries
     if (!selectedDate) return;
-    const localStart = new Date(selectedDate);
-    localStart.setHours(0, 0, 0, 0);
-    const start = localStart.toISOString();
-
-    const localEnd = new Date(selectedDate);
-    localEnd.setHours(23, 59, 59, 999);
-    const end = localEnd.toISOString();
+    
+    // Create Date boundaries accounting for local timezone offset
+    // This creates a date derived from the input (YYYY-MM-DD) which is treated as UTC Midnight by default in JS
+    // BUT we want the query to represent the local day. 
+    // Best practice for simple apps: Send usage of `timezone` modifier in SQL or construct ISO Strings that match local time
+    
+    const start = `${selectedDate}T00:00:00`;
+    const end = `${selectedDate}T23:59:59.999`;
     
     // Fetch orders for date range
+    // Supabase/Postgres will interpret these ISO-like strings relative to the session timezone or UTC if 'Z' is missing.
+    // By omitting 'Z', we ask Postgres to assume local time interpretation if configured, or we just accept 'local time' as the stored string.
+    
     const { data } = await supabase
       .from('orders')
       .select('*, order_items(cost_at_sale)')

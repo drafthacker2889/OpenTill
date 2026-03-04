@@ -383,3 +383,71 @@ CREATE TABLE public.wastage_logs (
   CONSTRAINT wastage_logs_pkey PRIMARY KEY (id),
   CONSTRAINT wastage_logs_ingredient_id_fkey FOREIGN KEY (ingredient_id) REFERENCES public.ingredients(id)
 );
+
+-- FUNCTIONS (RPCs)
+
+CREATE OR REPLACE FUNCTION public.sell_items(order_payload jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+  new_order_id uuid;
+  item jsonb;
+  v_stock_qty int;
+  v_track_stock boolean;
+BEGIN
+  -- 1. Create Order Record
+  INSERT INTO public.orders (
+    branch_id,
+    total_amount,
+    payment_method,
+    customer_name,
+    table_number,
+    user_id -- Now accepting user_id for Staff Performance
+  ) VALUES (
+    (order_payload->>'branchId')::uuid,
+    (order_payload->>'totalAmount')::int,
+    order_payload->>'paymentMethod',
+    order_payload->>'customerName',
+    order_payload->>'tableNumber',
+    (order_payload->>'userId')::uuid
+  ) RETURNING id INTO new_order_id;
+
+  -- 2. Process Items
+  FOR item IN SELECT * FROM jsonb_array_elements(order_payload->'items')
+  LOOP
+    -- A. Insert Line Item
+    INSERT INTO public.order_items (
+      order_id,
+      variant_id,
+      product_name_snapshot,
+      quantity,
+      price_at_sale,
+      modifiers
+    ) VALUES (
+      new_order_id,
+      (item->>'id')::uuid,
+      item->>'name',
+      (item->>'quantity')::int,
+      (item->>'price')::int,
+      item->'modifiers'
+    );
+
+    -- B. Deduct Stock (if applicable)
+    IF (item->>'id') IS NOT NULL THEN
+      SELECT stock_quantity, track_stock INTO v_stock_qty, v_track_stock
+      FROM public.variants WHERE id = (item->>'id')::uuid;
+
+      IF v_track_stock THEN
+        UPDATE public.variants
+        SET stock_quantity = stock_quantity - (item->>'quantity')::int
+        WHERE id = (item->>'id')::uuid;
+      END IF;
+    END IF;
+  END LOOP;
+
+  -- 3. Return Success
+  RETURN json_build_object('success', true, 'order_id', new_order_id);
+END;
+$function$;

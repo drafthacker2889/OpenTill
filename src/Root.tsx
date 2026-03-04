@@ -117,7 +117,8 @@ export default function Root({ userRole }: RootProps) {
     const { data } = await supabase
       .from('table_cart_items')
       .select('*')
-      .eq('table_number', selectedTable);
+      .eq('table_number', selectedTable)
+      .eq('branch_id', currentBranchId); // Filter by Branch!
     
     if (data) {
       setCart(data.map(item => ({
@@ -142,10 +143,12 @@ export default function Root({ userRole }: RootProps) {
       const currentQty = cart.filter(i => i.id === variant.id).reduce((sum, i) => sum + i.quantity, 0);
       
       // 2. NEW: Get quantity in OTHER active tables (prevent Overbooking)
+      // FIX: Ensure we only check THIS branch
       const { data: globalDrafts } = await supabase
         .from('table_cart_items')
         .select('quantity')
-        .eq('variant_id', variant.id);
+        .eq('variant_id', variant.id)
+        .eq('branch_id', currentBranchId); // Filter by Branch!
       
       const globalQty = globalDrafts ? globalDrafts.reduce((acc, row) => acc + row.quantity, 0) : 0;
       
@@ -168,12 +171,14 @@ export default function Root({ userRole }: RootProps) {
         .eq('variant_id', variant.id)
         .eq('product_name', fullName) 
         .eq('status', 'DRAFT') 
+        .eq('branch_id', currentBranchId)
         .single();
 
       if (existing) {
         await supabase.from('table_cart_items').update({ quantity: existing.quantity + 1 }).eq('id', existing.id);
       } else {
         await supabase.from('table_cart_items').insert({
+          branch_id: currentBranchId,
           table_number: selectedTable,
           variant_id: variant.id,
           product_name: fullName,
@@ -207,6 +212,7 @@ export default function Root({ userRole }: RootProps) {
         .from('table_cart_items')
         .select('*')
         .eq('table_number', selectedTable)
+        .eq('branch_id', currentBranchId)
         .eq('variant_id', variantId);
       
       if (productName) query = query.eq('product_name', productName); // Target specific modified item
@@ -246,9 +252,9 @@ export default function Root({ userRole }: RootProps) {
           await supabase.from('table_cart_items').delete().eq('id', existing.id);
           
           // Check if table is now empty to revert status to AVAILABLE
-          const { data: remaining } = await supabase.from('table_cart_items').select('id').eq('table_number', selectedTable);
+          const { data: remaining } = await supabase.from('table_cart_items').select('id').eq('table_number', selectedTable).eq('branch_id', currentBranchId);;
           if (!remaining || remaining.length === 0) {
-             await supabase.from('dining_tables').update({ status: 'AVAILABLE' }).eq('table_number', selectedTable);
+             await supabase.from('dining_tables').update({ status: 'AVAILABLE' }).eq('table_number', selectedTable).eq('branch_id', currentBranchId);
           }
         } else {
           await supabase.from('table_cart_items').update({ quantity: existing.quantity - 1 }).eq('id', existing.id);
@@ -275,7 +281,8 @@ export default function Root({ userRole }: RootProps) {
       .from('table_cart_items')
       .select('*')
       .eq('table_number', selectedTable)
-      .eq('status', 'DRAFT');
+      .eq('status', 'DRAFT')
+      .eq('branch_id', currentBranchId); // Filter by Branch!
 
     if (!draftItems || draftItems.length === 0) return alert("No new items to send.");
 
@@ -285,6 +292,7 @@ export default function Root({ userRole }: RootProps) {
       .select('*')
       .eq('table_number', selectedTable)
       .eq('status', 'PENDING')
+      .eq('branch_id', currentBranchId)
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
@@ -298,6 +306,7 @@ export default function Root({ userRole }: RootProps) {
     } else {
       // Create new ticket record
       const { error: ticketError } = await supabase.from('kitchen_tickets').insert({
+        branch_id: currentBranchId,
         table_number: selectedTable,
         items: draftItems.map(i => ({ name: i.product_name, qty: i.quantity, status: 'PENDING' })),
         status: 'PENDING'
@@ -310,7 +319,8 @@ export default function Root({ userRole }: RootProps) {
       .from('table_cart_items')
       .update({ status: 'SENT' })
       .eq('table_number', selectedTable)
-      .eq('status', 'DRAFT');
+      .eq('status', 'DRAFT')
+      .eq('branch_id', currentBranchId); // Filter by Branch!
 
     loadTableCart();
     alert("Kitchen order updated!");
@@ -329,15 +339,14 @@ export default function Root({ userRole }: RootProps) {
     const { data: { user } } = await supabase.auth.getUser();
     const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const discountAmount = Math.round(subtotal * (discountPercentage / 100));
-    const totalAmount = subtotal - discountAmount; // Without tip for now? Tip is handled in PaymentModal usually added to total.
     
-    // NOTE: In Split Bill, tip handling is tricky. Usually added to total before split.
-    // Or added per payment.
-    // We will assume totalAmount is the product total. Tip is handled separately or added to first payment?
-    // For simplicity: Order Total = Product Total. Tips are recorded in payments but maybe not part of "Order Total" check?
-    // Actually, normally Tips are over and above.
-    
-    // Let's create the order with PRODUCT TOTAL.
+    // Calculate Tax
+    const totalTax = cart.reduce((sum, item) => {
+        const tax = (item.price * item.quantity) * (taxRate / 100);
+        return sum + tax;
+    }, 0);
+
+    const totalAmount = Math.round(subtotal - discountAmount + totalTax); 
     
     const payload = {
       branchId: currentBranchId,
@@ -367,7 +376,14 @@ export default function Root({ userRole }: RootProps) {
     setShowPayment(false);
     const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const discountAmount = Math.round(subtotal * (discountPercentage / 100));
-    const totalAmount = subtotal - discountAmount + tipAmount;
+    const totalTax = cart.reduce((sum, item) => {
+        // Find product tax rate if available, else use global taxRate
+        // Assuming item doesn't carry tax info, we use global taxRate
+        const tax = (item.price * item.quantity) * (taxRate / 100);
+        return sum + tax;
+    }, 0);
+
+    const totalAmount = Math.round(subtotal - discountAmount + totalTax + tipAmount);
 
     // --- OFFLINE CHECK ---
     if (!isOnline) {
@@ -487,8 +503,8 @@ export default function Root({ userRole }: RootProps) {
 
       // IF DINING MODE: Clear the saved items and reset table status to AVAILABLE
       if (selectedTable) {
-        await supabase.from('table_cart_items').delete().eq('table_number', selectedTable);
-        await supabase.from('dining_tables').update({ status: 'AVAILABLE' }).eq('table_number', selectedTable);
+        await supabase.from('table_cart_items').delete().eq('table_number', selectedTable).eq('branch_id', currentBranchId);
+        await supabase.from('dining_tables').update({ status: 'AVAILABLE' }).eq('table_number', selectedTable).eq('branch_id', currentBranchId);
       }
 
       setLastOrder({
