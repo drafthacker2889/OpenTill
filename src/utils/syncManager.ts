@@ -35,7 +35,10 @@ export const syncOfflineOrders = async () => {
       }
   }
 
-  // 2. Sync Kitchen Tickets
+  // 2. Sync Kitchen Tickets - DEPRECATED
+  // sell_items RPC now creates tickets automatically.
+  // We disable this to prevent duplicate tickets on sync.
+  /*
   const pendingTickets = await getOfflineKitchenTickets();
   if (pendingTickets.length > 0) {
       console.log(`Syncing ${pendingTickets.length} offline kitchen tickets...`);
@@ -62,6 +65,7 @@ export const syncOfflineOrders = async () => {
           }
       }
   }
+  */
 };
 
 // Setup a listener for online events
