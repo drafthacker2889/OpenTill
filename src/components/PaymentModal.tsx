@@ -128,8 +128,8 @@ export default function PaymentModal({ subtotal, onConfirm, onCancel }: Props) {
             <button onClick={() => setTip(0)} style={btnStyle(tip === 0)}>{t('no_tip')}</button>
             <button onClick={() => addTipPercent(10)} style={btnStyle(false)}>10%</button>
             <button onClick={() => addTipPercent(15)} style={btnStyle(false)}>15%</button>
-            <button onClick={() => addTipPercent(20)} , selectedCustomer?.id)} style={payBtnStyle('var(--success-color, #2e7d32)')}>💵 {t('cash')}</button>
-          <button onClick={() => onConfirm('CARD', tip, selectedCustomer?.id
+            <button onClick={() => addTipPercent(20)} style={btnStyle(false)}>20%</button>
+          </div>
           
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
             <label style={{ fontSize: '0.9rem' }}>{t('custom_amount')}: $</label>
