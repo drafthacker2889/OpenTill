@@ -76,6 +76,7 @@ export default function CustomerMenu() {
         paymentMethod: 'online',
         items: cart.map(item => ({
             id: item.id, // variant_id
+            name: item.products.name + (item.name !== 'Standard' ? ` (${item.name})` : ''),
             quantity: item.quantity,
             price: item.price,
             modifiers: item.modifiers || []

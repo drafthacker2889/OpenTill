@@ -1,15 +1,9 @@
 -- Migration: Create sell_items RPC for atomic transactions and stock deduction
 -- Also adds increment_gift_card_balance RPC
 
--- 1. Create type for order item input if needed, or just use JSONB
--- We will use JSONB for flexibility: 
--- payload: { 
---   branchId: uuid, 
---   totalAmount: number, 
---   paymentMethod: text, 
---   customerId: uuid (optional), 
---   items: [ { variant_id: uuid, quantity: number, price: number, modifiers: [] } ] 
--- }
+-- 0. Ensure Required Columns Exist
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS customer_name text;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS table_number text;
 
 CREATE OR REPLACE FUNCTION public.sell_items(order_payload jsonb)
 RETURNS jsonb
@@ -58,12 +52,14 @@ BEGIN
       variant_id,
       quantity,
       price_at_sale,
+      product_name_snapshot,
       modifiers
     ) VALUES (
       v_order_id,
       v_variant_id,
       v_quantity,
       (v_item->>'price')::numeric,
+      v_item->>'name',
       v_item->'modifiers'
     );
 
@@ -79,7 +75,6 @@ BEGIN
       SET current_stock = current_stock - v_ingredient_deduction
       WHERE id = v_recipe.ingredient_id;
       
-      -- Optional: Log wastage or check for low stock here if needed
     END LOOP;
 
     -- 4. Deduct Variant Stock (if tracked)
