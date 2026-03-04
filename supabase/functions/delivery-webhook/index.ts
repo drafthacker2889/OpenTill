@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
     )
 
     const payload = await req.json()
-    const provider = req.get('x-delivery-provider') || 'generic'
+    const provider = req.headers.get('x-delivery-provider') || 'generic'
 
     console.log(`Received order from ${provider}`, payload)
 
