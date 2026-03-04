@@ -43,14 +43,17 @@ export const BookingService = {
 
     // Convert back to ISO string for comparison (assuming booking_time is timestamp)
     
-    const { count } = await supabase
+    // FETCH SUM OF COVERS (Wait for Supabase to support sum aggregate, or fetch party_size)
+    const { data: bookings } = await supabase
       .from('bookings')
-      .select('*', { count: 'exact', head: true })
+      .select('party_size')
       .gte('booking_time', rangeStart.toISOString())
       .lte('booking_time', rangeEnd.toISOString())
       .neq('status', 'CANCELLED');
 
-    return (count || 0) + newCovers <= LIMIT;
+    const currentCovers = bookings?.reduce((acc, booking: any) => acc + (booking.party_size || 0), 0) || 0;
+
+    return currentCovers + newCovers <= LIMIT;
   },
 
   // 3. THE "TETRIS" EFFECT: Find an available table without breaking slots

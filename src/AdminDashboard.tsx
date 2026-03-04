@@ -380,7 +380,8 @@ export default function AdminDashboard() {
     
     if (existingProd) { productId = existingProd.id } 
     else {
-      const { data: pData } = await supabase.from('products').insert({ name: newName, category: newCategory }).select().single()
+      const { data: pData, error } = await supabase.from('products').insert({ name: newName, category: newCategory }).select().single()
+      if (error || !pData) return alert("Product Creation Failed: " + (error?.message || "Unknown error"));
       productId = pData.id
     }
 

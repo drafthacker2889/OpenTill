@@ -384,8 +384,12 @@ export default function Root({ userRole }: RootProps) {
     }
     // --- GIFT CARD LOGIC END ---
 
+    // Generate User Context
+    const { data: { user } } = await supabase.auth.getUser();
+
     const payload = {
-      branchId: currentBranchId, 
+      branchId: currentBranchId,
+      userId: user?.id,
       totalAmount: totalAmount,
       paymentMethod: method.startsWith('GIFT_CARD') ? 'GIFT_CARD' : method,
       items: cart.map((item) => ({
