@@ -81,7 +81,10 @@ export default function InventoryManager() {
       quantity_required: newRecipeItem.quantity
     }]);
 
-    if (!error) {
+    if (error) {
+        if (error.code === '23505') alert("This ingredient is already in the recipe."); // Unique constraint violation
+        else alert("Error: " + error.message);
+    } else {
       setNewRecipeItem({ ingredient_id: '', quantity: 0 });
       fetchRecipe(selectedProduct);
     }
@@ -95,26 +98,18 @@ export default function InventoryManager() {
   const logWastage = async () => {
     if (!wastageEntry.ingredient_id || wastageEntry.quantity <= 0) return;
 
-    // 1. Log the wastage
-    const { error } = await supabase.from('wastage_logs').insert([{
-      ingredient_id: wastageEntry.ingredient_id,
-      quantity_wasted: wastageEntry.quantity,
-      reason: wastageEntry.reason,
-      created_at: new Date()
-    }]);
-
-    if (!error) {
-      // 2. Deduct from stock
-      // We need to fetch current stock and update it. 
-      // Ideally this is a stored procedure, but doing client-side for MVP.
-      const ingredient = ingredients.find(i => i.id === wastageEntry.ingredient_id);
-      if (ingredient) {
-         await supabase.from('ingredients').update({
-           current_stock: ingredient.current_stock - wastageEntry.quantity
-         }).eq('id', ingredient.id);
-      }
-
-      setWastageEntry({ ingredient_id: '', quantity: 0, reason: 'Expired' });
+    // Use RPC for Atomic Update
+    const { error: rpcError } = await supabase.rpc('log_wastage', {
+      p_ingredient_id: wastageEntry.ingredient_id,
+      p_quantity: wastageEntry.quantity,
+      p_reason: wastageEntry.reason,
+      p_branch_id: null
+    });
+    
+    if (rpcError) {
+      alert("Failed to log wastage: " + rpcError.message);
+    } else {
+      setWastageEntry({ ...wastageEntry, quantity: 0 });
       fetchWastageLogs();
       fetchIngredients(); // update stock view
     }
@@ -122,8 +117,14 @@ export default function InventoryManager() {
 
   const deleteIngredient = async (id: string) => {
     if(confirm('Are you sure? This will break recipes using this ingredient.')) {
-        await supabase.from('ingredients').delete().eq('id', id);
-        fetchIngredients();
+        const { error } = await supabase.from('ingredients').delete().eq('id', id);
+        if (error) {
+            // Check for Foreign Key Violation
+            if (error.code === '23503') alert("Cannot delete: This ingredient is used in one or more recipes. Remove it from recipes first.");
+            else alert("Error: " + error.message);
+        } else {
+            fetchIngredients();
+        }
     }
   }
 

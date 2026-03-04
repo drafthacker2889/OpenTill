@@ -5,13 +5,19 @@ import { supabase } from '../supabaseClient'; // Adjusted import path assuming t
 
 interface Props {
   subtotal: number // The bill amount (after discount)
+  onCreatePendingOrder?: () => Promise<string | null> // New Prop
   onConfirm: (method: string, tipAmount: number, customerId?: string) => void
   onCancel: () => void
 }
 
-export default function PaymentModal({ subtotal, onConfirm, onCancel }: Props) {
+export default function PaymentModal({ subtotal, onCreatePendingOrder, onConfirm, onCancel }: Props) {
   const { t } = useTranslation();
   const [tip, setTip] = useState(0)
+  const [isSplitMode, setIsSplitMode] = useState(false);
+  const [splitOrderId, setSplitOrderId] = useState<string | null>(null);
+  const [splitPayments, setSplitPayments] = useState<{amount: number, method: string, id: string}[]>([]);
+  const [splitMethod, setSplitMethod] = useState('CASH');
+  const [splitAmountInput, setSplitAmountInput] = useState('');
   
   // CUSTOMER LOYALTY STATE
   const [customerSearch, setCustomerSearch] = useState('')
@@ -73,6 +79,66 @@ export default function PaymentModal({ subtotal, onConfirm, onCancel }: Props) {
         setGcBalance(data.balance);
     }
   }
+
+  // --- SPLIT BILL LOGIC ---
+  const totalPaid = splitPayments.reduce((acc, p) => acc + p.amount, 0);
+  const remaining = finalTotal - totalPaid;
+
+  const handleAddSplitPayment = async () => {
+    const amt = Math.round(parseFloat(splitAmountInput) * 100);
+    if (isNaN(amt) || amt <= 0) return alert("Invalid amount");
+
+    // 1. Ensure Order Exists
+    let oid = splitOrderId;
+    if (!oid) {
+      if (!onCreatePendingOrder) return alert("Split billing not supported in this context.");
+      // Create Order
+      // Wait, createPendingOrder only deals with CART ITEMS.
+      // If we add tip, we assume tip is paid at end or distributed?
+      // Logic: Order Total = Product Total. Payments cover Order Total + Tip?
+      // Actually, standard POS: Total = Subtotal + Tip.
+      // Our createPendingOrder creates order with Order Total = Subtotal (no tip).
+      // So payments must cover specific amount.
+      // If tip is added in Modal, it increases 'finalTotal'.
+      // If payments >= finalTotal, we good.
+      // The excess is Tip.
+      // But RPC 'add_payment' checks against Order Total.
+      // If Order Total in DB is $100, and we pay $110 (10 tip), status becomes COMPLETED.
+      
+      oid = await onCreatePendingOrder();
+      if (!oid) return;
+      setSplitOrderId(oid);
+    }
+
+    // 2. Add Payment via RPC
+    const { data: payData, error } = await supabase.rpc('add_payment', {
+      p_order_id: oid,
+      p_amount: amt,
+      p_method: splitMethod
+    });
+
+    if (error || !payData?.success) {
+      alert("Payment Failed: " + (error?.message || payData?.message));
+      return;
+    }
+
+    // 3. Update State
+    setSplitPayments([...splitPayments, { amount: amt, method: splitMethod, id: crypto.randomUUID() }]);
+    setSplitAmountInput('');
+
+    // 4. Check Completion Local vs Remote
+    // The RPC returns status and remaining.
+    // If we added Tip locally, 'finalTotal' includes Tip. The DB order total does NOT include tip usually unless updated.
+    // So 'remaining' from RPC might be 0 (order paid), but we still owe Tip locally?
+    // Let's rely on local math for UX: "Remaining: $X".
+    
+    if ((totalPaid + amt) >= finalTotal) {
+        setTimeout(() => {
+           alert("Order Fully Paid!");
+           onConfirm('SPLIT', tip, selectedCustomer?.id);
+        }, 500);
+    }
+  };
 
   return (
     <div className="modal-overlay">
@@ -199,13 +265,71 @@ export default function PaymentModal({ subtotal, onConfirm, onCancel }: Props) {
             <span>{t('total')}:</span>
             <span>${(finalTotal / 100).toFixed(2)}</span>
           </div>
+          
+          {/* Remaining Balance for Split Logic */}
+          {isSplitMode && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.5rem', color: '#d32f2f', fontWeight: 'bold', marginTop: '10px' }}>
+               <span>Remaining:</span>
+               <span>${((finalTotal - totalPaid) / 100).toFixed(2)}</span>
+            </div>
+          )}
         </div>
 
-        {/* --- CONFIRM BUTTONS --- */}
-        <div style={{ display: 'flex', gap: '20px', marginBottom: '20px' }}>
-          <button onClick={() => onConfirm('CASH', tip)} style={payBtnStyle('var(--success-color, #2e7d32)')}>💵 {t('cash')}</button>
-          <button onClick={() => onConfirm('CARD', tip)} style={payBtnStyle('var(--primary-color, #1565c0)')}>💳 {t('card')}</button>
-        </div>
+        {/* --- SPLIT BILL UI --- */}
+        {isSplitMode ? (
+          <div style={{ marginBottom: '20px', textAlign: 'left', background: '#fff3e0', padding: '15px', borderRadius: '8px', border: '1px solid #ffb74d' }}>
+             <h3 style={{ marginTop: 0, color: '#e65100' }}>Split Payment</h3>
+             
+             {/* List Previous Payments */}
+             {splitPayments.map((p, idx) => (
+               <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #ffejoy' }}>
+                 <span>{p.method}</span>
+                 <span>${(p.amount / 100).toFixed(2)}</span>
+               </div>
+             ))}
+
+             {/* Add New Payment */}
+             <div style={{ marginTop: '15px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <select value={splitMethod} onChange={e => setSplitMethod(e.target.value)} style={{ padding: '8px', borderRadius: '4px' }}>
+                   <option value="CASH">Cash</option>
+                   <option value="CARD">Card</option>
+                   <option value="GIFT_CARD">Gift Card</option>
+                </select>
+                <input 
+                  type="number" 
+                  placeholder="Amount" 
+                  value={splitAmountInput}
+                  onChange={e => setSplitAmountInput(e.target.value)}
+                  style={{ flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                />
+                <button onClick={handleAddSplitPayment} style={{ background: '#e65100', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '4px', cursor: 'pointer' }}>
+                   Add
+                </button>
+             </div>
+             
+             <button onClick={() => setIsSplitMode(false)} style={{ marginTop: '10px', background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer', color: '#e65100' }}>
+               Back to Standard Payment
+             </button>
+          </div>
+        ) : (
+          <>
+            {/* --- CONFIRM BUTTONS --- */}
+            <div style={{ display: 'flex', gap: '20px', marginBottom: '20px' }}>
+              <button onClick={() => onConfirm('CASH', tip)} style={payBtnStyle('var(--success-color, #2e7d32)')}>💵 {t('cash')}</button>
+              <button onClick={() => onConfirm('CARD', tip)} style={payBtnStyle('var(--primary-color, #1565c0)')}>💳 {t('card')}</button>
+            </div>
+            
+            <button 
+               onClick={() => setIsSplitMode(true)} 
+               style={{ 
+                 width: '100%', padding: '10px', marginBottom: '10px', 
+                 background: '#ff9800', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' 
+               }}
+            >
+               ➗ Split Bill / Partial Payment
+            </button>
+          </>
+        )}
 
         <button onClick={onCancel} style={{ background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer', color: 'var(--text-secondary)' }}>
           {t('cancel')}

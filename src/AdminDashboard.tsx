@@ -5,7 +5,10 @@ import InventoryManager from './components/InventoryManager'
 import SupplyChain from './components/SupplyChain'
 import ModifierManager from './components/ModifierManager'
 import CrmDashboard from './components/CrmDashboard'
-import GiftCardManager from './components/GiftCardManager' // New: Gift Cards Import
+import GiftCardManager from './components/GiftCardManager'
+import ShiftManager from './components/ShiftManager'
+import AuditLogViewer from './components/AuditLogViewer'
+import TaxRuleManager from './components/TaxRuleManager'
 import { convertToCSV } from './utils/exporter'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from './contexts/ThemeContext'
@@ -102,9 +105,14 @@ export default function AdminDashboard() {
   }
 
   const fetchAnalytics = async () => {
-    // Determine start/end of selected date
-    const start = `${selectedDate}T00:00:00`
-    const end = `${selectedDate}T23:59:59`
+    // 6. 🕒 Timezone Fix: Create absolute date boundaries for local day
+    const localStart = new Date(selectedDate);
+    localStart.setHours(0, 0, 0, 0);
+    const start = localStart.toISOString();
+
+    const localEnd = new Date(selectedDate);
+    localEnd.setHours(23, 59, 59, 999);
+    const end = localEnd.toISOString();
     
     // Fetch orders for date range
     const { data } = await supabase
@@ -403,8 +411,14 @@ export default function AdminDashboard() {
 
   const handleDeleteVariant = async (v: any) => {
     if (confirm(`Delete ${v.products?.name}?`)) {
-      await supabase.from('variants').delete().eq('id', v.id)
-      fetchVariants()
+      const { error } = await supabase.from('variants').delete().eq('id', v.id)
+      if (error) {
+        // 3. 💥 Silent Failure Fix: Alert user on FK Constraint
+        alert("Cannot delete variant: It is likely used in past orders or linked to ingredients. Archive it instead.");
+        console.error(error);
+      } else {
+        fetchVariants()
+      }
     }
   }
 
@@ -448,7 +462,8 @@ export default function AdminDashboard() {
 
       {/* TABS */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '25px', overflowX: 'auto', paddingBottom: '10px' }}>
-        {['products', 'stock', 'purchasing', 'sales', 'analytics', 'bookings', 'staff', 'crm', 'giftcards', 'settings'].filter(t => t !== 'crm' || crmActive).map(tab => (
+        {['products', 'stock', 'purchasing', 'sales', 'analytics', 'bookings', 'staff', 'crm', 'giftcards', 'shifts', 'audit', 'settings'].map(tab => (
+          (tab === 'crm' && !crmActive) ? null :
           <button 
             key={tab} 
             onClick={() => setActiveTab(tab)} 
@@ -675,6 +690,12 @@ export default function AdminDashboard() {
         ) : activeTab === 'giftcards' ? (
           <GiftCardManager />
 
+        ) : activeTab === 'shifts' ? (
+          <ShiftManager />
+
+        ) : activeTab === 'audit' ? (
+          <AuditLogViewer branchId={null}/>
+
         ) : activeTab === 'settings' ? (
           <div style={{ padding: '30px', maxWidth: '600px' }}>
             <h2 style={{ marginTop: 0 }}>{t('settings')}</h2>
@@ -720,6 +741,11 @@ export default function AdminDashboard() {
                   <option value="¥">¥ (JPY)</option>
                 </select>
               </div>
+            </div>
+
+            {/* TAX RULES INTEGRATION */}
+            <div style={{ marginBottom: '30px' }}>
+                <TaxRuleManager />
             </div>
 
             {/* NEW: LANGUAGE & THEME PREFERENCES */}

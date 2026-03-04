@@ -10,6 +10,7 @@ interface Props {
   onSendToKitchen: () => void // New prop for kitchen routing
   isDiningMode: boolean; // NEW: To toggle Kitchen UI
   t: TFunction; // NEW: i18n
+  taxRate?: number; // FIX: Tax Rate Injection
 }
 
 export default function CartSidebar({ 
@@ -20,13 +21,18 @@ export default function CartSidebar({
   onSetDiscount,
   onSendToKitchen,
   isDiningMode,
-  t
+  t,
+  taxRate = 0 // Default to 0 if not provided
 }: Props) {
   
   // Calculate Math
-  const subtotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-  const discountAmount = Math.round(subtotal * (discountPercentage / 100))
-  const finalTotal = subtotal - discountAmount
+  const subtotalRaw = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+  const discountAmount = Math.round(subtotalRaw * (discountPercentage / 100))
+  const afterDiscount = subtotalRaw - discountAmount
+  
+  // FIX: Tax Calculation
+  const taxAmount = Math.round(afterDiscount * (taxRate / 100))
+  const finalTotal = afterDiscount + taxAmount
 
   // Helper to check for new items that haven't been "Sent" yet
   const hasNewItems = cartItems.some(item => (item as any).status === 'DRAFT' || !(item as any).status)
@@ -157,12 +163,20 @@ export default function CartSidebar({
         <div style={{ marginBottom: '20px', fontSize: '0.95rem', color: '#666' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
             <span>{t('subtotal')}</span>
-            <span>${(subtotal / 100).toFixed(2)}</span>
+            <span>${(subtotalRaw / 100).toFixed(2)}</span>
           </div>
           {discountPercentage > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#e53935' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#e53935', marginBottom: '6px' }}>
               <span>{t('discount')} ({discountPercentage}%)</span>
               <span>-${(discountAmount / 100).toFixed(2)}</span>
+            </div>
+          )}
+          
+          {/* TAX LINE */}
+          {taxRate > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.9em' }}>
+              <span>{t('tax') || 'Tax'} ({taxRate}%)</span>
+              <span>${(taxAmount / 100).toFixed(2)}</span>
             </div>
           )}
         </div>

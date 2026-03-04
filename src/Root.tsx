@@ -35,6 +35,7 @@ export default function Root({ userRole }: RootProps) {
   // --- State Management ---
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showPayment, setShowPayment] = useState(false);
+  const [createdOrderId, setCreatedOrderId] = useState<string | null>(null); // NEW: Track pending order ID
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastOrder, setLastOrder] = useState<any>(null);
   const [discountPercentage, setDiscountPercentage] = useState(0);
@@ -45,6 +46,7 @@ export default function Root({ userRole }: RootProps) {
   const [selectedTable, setSelectedTable] = useState<string | null>(null); 
   const [currentBranchId, setCurrentBranchId] = useState<string | null>(null); // NEW: Multi-Tenant Branch ID
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false); // NEW: Responsive Mobile Cart Toggle
+  const [taxRate, setTaxRate] = useState(0); // NEW: Tax Rate for Calculation
 
   const [showClockIn, setShowClockIn] = useState(false); // NEW: Show Clock In Modal
 
@@ -100,13 +102,13 @@ export default function Root({ userRole }: RootProps) {
   }, [selectedTable]);
 
   const fetchDiningMode = async () => {
-    const { data } = await supabase
-      .from('settings')
-      .select('value')
-      .eq('key', 'dining_mode')
-      .single(); 
-    
-    if (data) setDiningModeActive(data.value);
+    // 1. Fetch Dining Mode
+    const { data: dining } = await supabase.from('settings').select('value').eq('key', 'dining_mode').single(); 
+    if (dining) setDiningModeActive(dining.value);
+
+    // 2. Fetch Tax Rate (FIX: Phantom Tax Rate Bug)
+    const { data: tax } = await supabase.from('settings').select('value').eq('key', 'tax_rate').single();
+    if (tax) setTaxRate(Number(tax.value) || 0);
   };
 
   const loadTableCart = async () => {
@@ -311,6 +313,46 @@ export default function Root({ userRole }: RootProps) {
   };
 
   // --- 5. Confirm Payment & Clear Table Persistence ---
+  
+  // NEW: Create Pending Order for Split Bill
+  const handleCreatePendingOrder = async (): Promise<string | null> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const discountAmount = Math.round(subtotal * (discountPercentage / 100));
+    const totalAmount = subtotal - discountAmount; // Without tip for now? Tip is handled in PaymentModal usually added to total.
+    
+    // NOTE: In Split Bill, tip handling is tricky. Usually added to total before split.
+    // Or added per payment.
+    // We will assume totalAmount is the product total. Tip is handled separately or added to first payment?
+    // For simplicity: Order Total = Product Total. Tips are recorded in payments but maybe not part of "Order Total" check?
+    // Actually, normally Tips are over and above.
+    
+    // Let's create the order with PRODUCT TOTAL.
+    
+    const payload = {
+      branchId: currentBranchId,
+      userId: user?.id,
+      totalAmount: totalAmount,
+      paymentMethod: 'PENDING',
+      tableNumber: selectedTable, 
+      items: cart.map((item) => ({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        modifiers: item.modifiers || []
+      })),
+      skipKds: !!selectedTable
+    };
+    
+    const { data, error } = await supabase.rpc('sell_items', { order_payload: payload });
+    if (error) {
+      alert("Error initializing split order: " + error.message);
+      return null;
+    }
+    return data.order_id;
+  };
+
   const handleConfirmPayment = async (method: string, tipAmount: number, customerId?: string) => {
     setShowPayment(false);
     const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -625,8 +667,9 @@ export default function Root({ userRole }: RootProps) {
             discountPercentage={discountPercentage}
             onSetDiscount={setDiscountPercentage}
             onSendToKitchen={handleSendToKitchen} 
-            isDiningMode={diningModeActive} // Pass dining mode to sidebar
-            t={t} // Pass translate function
+            isDiningMode={diningModeActive} 
+            t={t} 
+            taxRate={taxRate} // FIX: Pass Tax Rate
           />
         </div>
       </div>
@@ -637,6 +680,7 @@ export default function Root({ userRole }: RootProps) {
             cart.reduce((sum, item) => sum + item.price * item.quantity, 0) *
             (1 - discountPercentage / 100)
           }
+          onCreatePendingOrder={handleCreatePendingOrder}
           onConfirm={handleConfirmPayment}
           onCancel={() => setShowPayment(false)}
         />
