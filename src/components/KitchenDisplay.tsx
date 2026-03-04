@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
+import { db } from '../utils/offlineDb'; // Offline Support
 
 interface KitchenTicket {
   id: number;
   table_number: string;
-  items: { name: string; qty: number; void?: boolean; status?: 'PENDING' | 'READY' }[]; // Updated for partial status
+  items: { name: string; qty: number; modifiers?: any[]; void?: boolean; status?: 'PENDING' | 'READY' }[]; 
   status: 'PENDING' | 'COMPLETED' | 'VOIDED';
   created_at: string;
+  is_offline?: boolean; // Use to differentiate
 }
 
 export default function KitchenDisplay() {
@@ -42,19 +44,31 @@ export default function KitchenDisplay() {
   }, []);
 
   const fetchActiveTickets = async () => {
-    // UPDATED: Fetch both PENDING and VOIDED statuses so cancellations show up
-    const { data, error } = await supabase
+    // 1. Fetch Remote Tickets
+    const { data: remoteData, error } = await supabase
       .from('kitchen_tickets')
       .select('*')
       .in('status', ['PENDING', 'VOIDED']) 
       .order('created_at', { ascending: true });
 
+    // 2. Fetch Local Offline Tickets
+    const localData = await db.kitchenTickets
+        .where('status')
+        .notEqual('COMPLETED')
+        .toArray();
+
+    // 3. Merge and Sort
+    // We treat local tickets as valid.
+    const allTickets = [
+        ...(remoteData || []),
+        ...(localData || []).map(t => ({...t, is_offline: true, items: t.items || []}))
+    ].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
     if (!error) {
-      // If a new ticket was inserted, play the sound
-      if (data && data.length > tickets.length) {
+      if (allTickets.length > tickets.length) {
          playNotificationSound();
       }
-      setTickets(data || []);
+      setTickets(allTickets as KitchenTicket[]);
     }
     setLoading(false);
   };
@@ -67,12 +81,16 @@ export default function KitchenDisplay() {
     // Toggle between PENDING and READY
     newItems[itemIndex].status = currentStatus === 'READY' ? 'PENDING' : 'READY';
 
-    const { error } = await supabase
-      .from('kitchen_tickets')
-      .update({ items: newItems })
-      .eq('id', ticket.id);
+    if (ticket.is_offline) {
+        await db.kitchenTickets.update(ticket.id, { items: newItems });
+    } else {
+        const { error } = await supabase
+        .from('kitchen_tickets')
+        .update({ items: newItems })
+        .eq('id', ticket.id);
+    }
 
-    if (!error) fetchActiveTickets();
+    fetchActiveTickets();
   };
 
   const playNotificationSound = () => {
@@ -80,14 +98,18 @@ export default function KitchenDisplay() {
     audio.play().catch(() => console.log("Audio play blocked by browser. Click screen once."));
   };
 
-  const handleComplete = async (id: number) => {
-    // Marking as COMPLETED removes it from this view
-    const { error } = await supabase
-      .from('kitchen_tickets')
-      .update({ status: 'COMPLETED' })
-      .eq('id', id);
-
-    if (!error) fetchActiveTickets();
+  const handleComplete = async (id: number, isOffline = false) => {
+    if (isOffline) {
+        await db.kitchenTickets.update(id, { status: 'COMPLETED' });
+    } else {
+        // Marking as COMPLETED removes it from this view
+        const { error } = await supabase
+        .from('kitchen_tickets')
+        .update({ status: 'COMPLETED' })
+        .eq('id', id);
+    }
+    
+    fetchActiveTickets();
   };
 
   const getTimeElapsed = (createdAt: string) => {
@@ -167,7 +189,7 @@ export default function KitchenDisplay() {
 
                 {/* ACTION BUTTON */}
                 <button 
-                  onClick={() => handleComplete(ticket.id)}
+                  onClick={() => handleComplete(ticket.id, ticket.is_offline)}
                   style={{
                     ...completeBtn,
                     background: isVoidedTicket ? '#444' : '#333'

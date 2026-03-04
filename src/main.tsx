@@ -9,7 +9,10 @@ import CustomerMenu from './components/CustomerMenu' // New: Online Ordering
 import SettingsModal from './components/SettingsModal' // New: Settings
 import { ThemeProvider } from './contexts/ThemeContext'
 import './i18n'; // Import i18n configuration
+import { setupSyncListener } from './utils/syncManager';
 import './App.css'
+
+setupSyncListener();
 
 function App() {
   const [session, setSession] = useState<any>(null)

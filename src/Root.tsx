@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next'; // NEW: i18n
-import { Globe, ShoppingCart, User, X, ShoppingBag } from 'lucide-react'; // NEW: Icons for versatility
+import { Globe, ShoppingCart, User, X, ShoppingBag, WifiOff } from 'lucide-react'; // NEW: Icons for versatility
+import { useNetworkStatus } from './hooks/useNetworkStatus'
+import { saveOfflineOrder, saveOfflineKitchenTicket } from './utils/offlineDb'
 import { supabase } from './supabaseClient';
 import ProductGrid from './components/ProductGrid';
 import CartSidebar from './components/CartSidebar';
@@ -28,6 +30,7 @@ interface RootProps {
 
 export default function Root({ userRole }: RootProps) {
   const { t, i18n } = useTranslation(); // Hook for translations
+  const isOnline = useNetworkStatus();
 
   // --- State Management ---
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -312,6 +315,55 @@ export default function Root({ userRole }: RootProps) {
     const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const discountAmount = Math.round(subtotal * (discountPercentage / 100));
     const totalAmount = subtotal - discountAmount + tipAmount;
+
+    // --- OFFLINE CHECK ---
+    if (!isOnline) {
+      if (method.startsWith('GIFT_CARD:')) {
+        alert("Gift Cards require internet connection");
+        return;
+      }
+
+      const offlinePayload = {
+        branchId: currentBranchId,
+        totalAmount: totalAmount,
+        paymentMethod: method,
+        customerId: customerId,
+        items: cart.map((item) => ({
+          id: item.id,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          modifiers: item.modifiers || []
+        })),
+        created_at: new Date().toISOString()
+      };
+
+      try {
+        await saveOfflineOrder(offlinePayload);
+        
+        // KDS OFFLINE LOGIC
+        await saveOfflineKitchenTicket({
+            table_number: selectedTable || 'Takeaway',
+            items: cart.map(i => ({ 
+                name: i.name, 
+                qty: i.quantity, 
+                status: 'PENDING',
+                modifiers: i.modifiers // Optional: Include modifiers for kitchen
+            })),
+            status: 'PENDING',
+            created_at: new Date().toISOString(),
+            is_offline: true
+        } as any);
+
+        setCart([]);
+        if (selectedTable) localStorage.removeItem(`order_${selectedTable}`);
+        alert("Order saved offline. Will sync when online.");
+      } catch (err) {
+        console.error("Offline Save Error", err);
+        alert("Failed to save order offline.");
+      }
+      return;
+    }
 
     // --- GIFT CARD LOGIC START ---
     let giftCardCode = "";
