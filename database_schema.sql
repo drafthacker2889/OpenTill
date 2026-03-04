@@ -8,6 +8,19 @@ CREATE TABLE public.areas (
   is_active boolean DEFAULT true,
   CONSTRAINT areas_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.audit_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  branch_id uuid,
+  user_id uuid,
+  action_type text NOT NULL,
+  resource_id text,
+  details jsonb DEFAULT '{}'::jsonb,
+  ip_address text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT audit_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT audit_logs_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
+  CONSTRAINT audit_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
 CREATE TABLE public.booking_settings (
   id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
   interval_minutes integer DEFAULT 15,
@@ -180,9 +193,13 @@ CREATE TABLE public.orders (
   device_id text,
   branch_id uuid DEFAULT 'a798abd7-2ab8-4419-8bb6-d77bd584a2bf'::uuid,
   customer_id uuid,
+  customer_name text,
+  table_number text,
+  user_id uuid,
   CONSTRAINT orders_pkey PRIMARY KEY (id),
   CONSTRAINT orders_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
-  CONSTRAINT orders_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id)
+  CONSTRAINT orders_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id),
+  CONSTRAINT orders_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
 CREATE TABLE public.organizations (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -191,6 +208,17 @@ CREATE TABLE public.organizations (
   owner_id uuid,
   CONSTRAINT organizations_pkey PRIMARY KEY (id),
   CONSTRAINT organizations_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.payments (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  order_id uuid,
+  amount numeric NOT NULL,
+  method text NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  created_by uuid,
+  CONSTRAINT payments_pkey PRIMARY KEY (id),
+  CONSTRAINT payments_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id),
+  CONSTRAINT payments_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id)
 );
 CREATE TABLE public.product_ingredients (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -242,6 +270,23 @@ CREATE TABLE public.settings (
   key text NOT NULL UNIQUE,
   value jsonb NOT NULL,
   CONSTRAINT settings_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.shift_closings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  branch_id uuid,
+  opened_by uuid,
+  opened_at timestamp with time zone DEFAULT now(),
+  opening_cash numeric DEFAULT 0,
+  closed_at timestamp with time zone,
+  cash_sales numeric DEFAULT 0,
+  card_sales numeric DEFAULT 0,
+  expected_cash numeric DEFAULT 0,
+  actual_cash numeric DEFAULT 0,
+  variance numeric DEFAULT 0,
+  notes text,
+  CONSTRAINT shift_closings_pkey PRIMARY KEY (id),
+  CONSTRAINT shift_closings_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
+  CONSTRAINT shift_closings_opened_by_fkey FOREIGN KEY (opened_by) REFERENCES auth.users(id)
 );
 CREATE TABLE public.shifts (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -295,6 +340,16 @@ CREATE TABLE public.table_cart_items (
   CONSTRAINT table_cart_items_variant_id_fkey FOREIGN KEY (variant_id) REFERENCES public.variants(id),
   CONSTRAINT table_cart_items_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
 );
+CREATE TABLE public.tax_rules (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  branch_id uuid,
+  name text NOT NULL,
+  rate numeric NOT NULL,
+  is_default boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT tax_rules_pkey PRIMARY KEY (id),
+  CONSTRAINT tax_rules_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
+);
 CREATE TABLE public.variants (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   product_id uuid,
@@ -328,219 +383,3 @@ CREATE TABLE public.wastage_logs (
   CONSTRAINT wastage_logs_pkey PRIMARY KEY (id),
   CONSTRAINT wastage_logs_ingredient_id_fkey FOREIGN KEY (ingredient_id) REFERENCES public.ingredients(id)
 );
-
--- 1. Ensure Required Columns Exist (Idempotent)
--- (These might fail in a fresh run if table doesn't exist, but fine for schema doc)
--- ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS customer_name text;
--- ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS table_number text;
-
--- 2. Secure Order Processing RPC
-CREATE OR REPLACE FUNCTION public.sell_items(order_payload jsonb)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_order_id uuid;
-  v_item jsonb;
-  v_variant_id uuid;
-  v_quantity int;
-  v_total_amount numeric;
-  v_recipe record;
-  v_ingredient_deduction numeric;
-BEGIN
-  -- Insert Order
-  INSERT INTO public.orders (
-    branch_id,
-    total_amount,
-    payment_method,
-    customer_id,
-    customer_name,
-    table_number,
-    status,
-    created_at
-  ) VALUES (
-    (order_payload->>'branchId')::uuid,
-    (order_payload->>'totalAmount')::numeric,
-    order_payload->>'paymentMethod',
-    (order_payload->>'customerId')::uuid,
-    order_payload->>'customerName',
-    order_payload->>'tableNumber',
-    'COMPLETED',
-    NOW()
-  ) RETURNING id INTO v_order_id;
-
-  -- Process Items Loop
-  FOR v_item IN SELECT * FROM jsonb_array_elements(order_payload->'items')
-  LOOP
-    v_variant_id := (v_item->>'id')::uuid;
-    v_quantity := (v_item->>'quantity')::int;
-
-    -- Insert Order Item
-    INSERT INTO public.order_items (
-      order_id,
-      variant_id,
-      quantity,
-      price_at_sale,
-      product_name_snapshot,
-      modifiers
-    ) VALUES (
-      v_order_id,
-      v_variant_id,
-      v_quantity,
-      (v_item->>'price')::numeric,
-      v_item->>'name',
-      v_item->'modifiers'
-    );
-
-    -- Deduct Ingredients (Atomic Stock)
-    FOR v_recipe IN 
-      SELECT ingredient_id, quantity_required 
-      FROM public.product_ingredients 
-      WHERE variant_id = v_variant_id
-    LOOP
-      v_ingredient_deduction := v_recipe.quantity_required * v_quantity;
-
-      UPDATE public.ingredients
-      SET current_stock = current_stock - v_ingredient_deduction
-      WHERE id = v_recipe.ingredient_id;
-    END LOOP;
-
-    -- Deduct Variant Stock (if tracked)
-    UPDATE public.variants
-    SET stock_quantity = stock_quantity - v_quantity
-    WHERE id = v_variant_id AND track_stock = true;
-
-  END LOOP;
-
-  RETURN jsonb_build_object('success', true, 'order_id', v_order_id);
-EXCEPTION WHEN OTHERS THEN
-  RAISE EXCEPTION 'Transaction failed: %', SQLERRM;
-END;
-$$;
-
--- 3. Gift Card Recharge RPC
-CREATE OR REPLACE FUNCTION public.increment_gift_card_balance(card_code text, amount numeric)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-  UPDATE public.gift_cards
-  SET balance = balance + amount,
-      last_used = NOW()
-  WHERE code = card_code;
-END;
-$$;
-- -   F i x :   U p d a t e   s e l l _ i t e m s   t o   i n s e r t   i n t o   k i t c h e n _ t i c k e t s  
- - -   T h i s   e n s u r e s   o n l i n e / c u s t o m e r   o r d e r s   a p p e a r   o n   t h e   K D S  
-  
- C R E A T E   O R   R E P L A C E   F U N C T I O N   p u b l i c . s e l l _ i t e m s ( o r d e r _ p a y l o a d   j s o n b )  
- R E T U R N S   j s o n b  
- L A N G U A G E   p l p g s q l  
- S E C U R I T Y   D E F I N E R  
- A S   $ $  
- D E C L A R E  
-     v _ o r d e r _ i d   u u i d ;  
-     v _ i t e m   j s o n b ;  
-     v _ v a r i a n t _ i d   u u i d ;  
-     v _ q u a n t i t y   i n t ;  
-     v _ t o t a l _ a m o u n t   n u m e r i c ;  
-     v _ r e c i p e   r e c o r d ;  
-     v _ i n g r e d i e n t _ d e d u c t i o n   n u m e r i c ;  
-     v _ k i t c h e n _ i t e m s   j s o n b   : =   ' [ ] ' : : j s o n b ;  
- B E G I N  
-     - -   1 .   I n s e r t   O r d e r  
-     I N S E R T   I N T O   p u b l i c . o r d e r s   (  
-         b r a n c h _ i d ,  
-         t o t a l _ a m o u n t ,  
-         p a y m e n t _ m e t h o d ,  
-         c u s t o m e r _ i d ,  
-         c u s t o m e r _ n a m e ,  
-         t a b l e _ n u m b e r ,  
-         s t a t u s ,  
-         c r e a t e d _ a t  
-     )   V A L U E S   (  
-         ( o r d e r _ p a y l o a d - > > ' b r a n c h I d ' ) : : u u i d ,  
-         ( o r d e r _ p a y l o a d - > > ' t o t a l A m o u n t ' ) : : n u m e r i c ,  
-         o r d e r _ p a y l o a d - > > ' p a y m e n t M e t h o d ' ,  
-         ( o r d e r _ p a y l o a d - > > ' c u s t o m e r I d ' ) : : u u i d ,  
-         o r d e r _ p a y l o a d - > > ' c u s t o m e r N a m e ' ,  
-         o r d e r _ p a y l o a d - > > ' t a b l e N u m b e r ' ,  
-         ' C O M P L E T E D ' ,  
-         N O W ( )  
-     )   R E T U R N I N G   i d   I N T O   v _ o r d e r _ i d ;  
-  
-     - -   2 .   P r o c e s s   I t e m s  
-     F O R   v _ i t e m   I N   S E L E C T   *   F R O M   j s o n b _ a r r a y _ e l e m e n t s ( o r d e r _ p a y l o a d - > ' i t e m s ' )  
-     L O O P  
-         v _ v a r i a n t _ i d   : =   ( v _ i t e m - > > ' i d ' ) : : u u i d ;  
-         v _ q u a n t i t y   : =   ( v _ i t e m - > > ' q u a n t i t y ' ) : : i n t ;  
-  
-         - -   I n s e r t   O r d e r   I t e m  
-         I N S E R T   I N T O   p u b l i c . o r d e r _ i t e m s   (  
-             o r d e r _ i d ,  
-             v a r i a n t _ i d ,  
-             q u a n t i t y ,  
-             p r i c e _ a t _ s a l e ,  
-             p r o d u c t _ n a m e _ s n a p s h o t ,  
-             m o d i f i e r s  
-         )   V A L U E S   (  
-             v _ o r d e r _ i d ,  
-             v _ v a r i a n t _ i d ,  
-             v _ q u a n t i t y ,  
-             ( v _ i t e m - > > ' p r i c e ' ) : : n u m e r i c ,  
-             v _ i t e m - > > ' n a m e ' ,  
-             v _ i t e m - > ' m o d i f i e r s '  
-         ) ;  
-          
-         - -   B u i l d   K i t c h e n   I t e m   O b j e c t  
-         v _ k i t c h e n _ i t e m s   : =   v _ k i t c h e n _ i t e m s   | |   j s o n b _ b u i l d _ o b j e c t (  
-                 ' n a m e ' ,   v _ i t e m - > > ' n a m e ' ,  
-                 ' q t y ' ,   v _ q u a n t i t y ,  
-                 ' s t a t u s ' ,   ' P E N D I N G ' ,  
-                 ' m o d i f i e r s ' ,   v _ i t e m - > ' m o d i f i e r s '  
-         ) ;  
-  
-         - -   3 .   D e d u c t   I n g r e d i e n t s   ( A t o m i c   S t o c k   M a n a g e m e n t )  
-         F O R   v _ r e c i p e   I N    
-             S E L E C T   i n g r e d i e n t _ i d ,   q u a n t i t y _ r e q u i r e d    
-             F R O M   p u b l i c . p r o d u c t _ i n g r e d i e n t s    
-             W H E R E   v a r i a n t _ i d   =   v _ v a r i a n t _ i d  
-         L O O P  
-             v _ i n g r e d i e n t _ d e d u c t i o n   : =   v _ r e c i p e . q u a n t i t y _ r e q u i r e d   *   v _ q u a n t i t y ;  
-  
-             U P D A T E   p u b l i c . i n g r e d i e n t s  
-             S E T   c u r r e n t _ s t o c k   =   c u r r e n t _ s t o c k   -   v _ i n g r e d i e n t _ d e d u c t i o n  
-             W H E R E   i d   =   v _ r e c i p e . i n g r e d i e n t _ i d ;  
-         E N D   L O O P ;  
-  
-         - -   4 .   D e d u c t   V a r i a n t   S t o c k   ( i f   t r a c k e d )  
-         U P D A T E   p u b l i c . v a r i a n t s  
-         S E T   s t o c k _ q u a n t i t y   =   s t o c k _ q u a n t i t y   -   v _ q u a n t i t y  
-         W H E R E   i d   =   v _ v a r i a n t _ i d   A N D   t r a c k _ s t o c k   =   t r u e ;  
-  
-     E N D   L O O P ;  
-  
-     - -   5 .   C r e a t e   K i t c h e n   T i c k e t   ( C R I T I C A L   F I X   F O R   K D S )  
-     I N S E R T   I N T O   p u b l i c . k i t c h e n _ t i c k e t s   (  
-         t a b l e _ n u m b e r ,  
-         i t e m s ,  
-         s t a t u s ,  
-         c r e a t e d _ a t  
-     )   V A L U E S   (  
-         C O A L E S C E ( o r d e r _ p a y l o a d - > > ' t a b l e N u m b e r ' ,   ' O n l i n e   O r d e r ' ) ,  
-         v _ k i t c h e n _ i t e m s ,  
-         ' P E N D I N G ' ,  
-         N O W ( )  
-     ) ;  
-  
-     R E T U R N   j s o n b _ b u i l d _ o b j e c t (  
-         ' s u c c e s s ' ,   t r u e ,  
-         ' o r d e r _ i d ' ,   v _ o r d e r _ i d  
-     ) ;  
- E X C E P T I O N   W H E N   O T H E R S   T H E N  
-     R A I S E   E X C E P T I O N   ' T r a n s a c t i o n   f a i l e d :   % ' ,   S Q L E R R M ;  
- E N D ;  
- $ $ ;  
- 
