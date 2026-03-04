@@ -1,9 +1,5 @@
--- Migration: Create sell_items RPC for atomic transactions and stock deduction
--- Also adds increment_gift_card_balance RPC
-
--- 0. Ensure Required Columns Exist
-ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS customer_name text;
-ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS table_number text;
+-- Fix: Update sell_items to insert into kitchen_tickets
+-- This ensures online/customer orders appear on the KDS
 
 CREATE OR REPLACE FUNCTION public.sell_items(order_payload jsonb)
 RETURNS jsonb
@@ -18,6 +14,7 @@ DECLARE
   v_total_amount numeric;
   v_recipe record;
   v_ingredient_deduction numeric;
+  v_kitchen_items jsonb := '[]'::jsonb;
 BEGIN
   -- 1. Insert Order
   INSERT INTO public.orders (
@@ -43,7 +40,7 @@ BEGIN
   -- 2. Process Items
   FOR v_item IN SELECT * FROM jsonb_array_elements(order_payload->'items')
   LOOP
-    v_variant_id := (v_item->>'id')::uuid; -- Assuming 'id' matches variant_id in payload
+    v_variant_id := (v_item->>'id')::uuid;
     v_quantity := (v_item->>'quantity')::int;
 
     -- Insert Order Item
@@ -62,6 +59,14 @@ BEGIN
       v_item->>'name',
       v_item->'modifiers'
     );
+    
+    -- Build Kitchen Item Object
+    v_kitchen_items := v_kitchen_items || jsonb_build_object(
+        'name', v_item->>'name',
+        'qty', v_quantity,
+        'status', 'PENDING',
+        'modifiers', v_item->'modifiers'
+    );
 
     -- 3. Deduct Ingredients (Atomic Stock Management)
     FOR v_recipe IN 
@@ -74,7 +79,6 @@ BEGIN
       UPDATE public.ingredients
       SET current_stock = current_stock - v_ingredient_deduction
       WHERE id = v_recipe.ingredient_id;
-      
     END LOOP;
 
     -- 4. Deduct Variant Stock (if tracked)
@@ -84,25 +88,24 @@ BEGIN
 
   END LOOP;
 
+  -- 5. Create Kitchen Ticket (CRITICAL FIX FOR KDS)
+  INSERT INTO public.kitchen_tickets (
+    table_number,
+    items,
+    status,
+    created_at
+  ) VALUES (
+    COALESCE(order_payload->>'tableNumber', 'Online Order'),
+    v_kitchen_items,
+    'PENDING',
+    NOW()
+  );
+
   RETURN jsonb_build_object(
     'success', true,
     'order_id', v_order_id
   );
 EXCEPTION WHEN OTHERS THEN
   RAISE EXCEPTION 'Transaction failed: %', SQLERRM;
-END;
-$$;
-
--- 2. Gift Card Recharge RPC
-CREATE OR REPLACE FUNCTION public.increment_gift_card_balance(card_code text, amount numeric)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-  UPDATE public.gift_cards
-  SET balance = balance + amount,
-      last_used = NOW()
-  WHERE code = card_code;
 END;
 $$;
