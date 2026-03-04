@@ -6,10 +6,12 @@ import SupplyChain from './components/SupplyChain'
 import ModifierManager from './components/ModifierManager'
 import { convertToCSV } from './utils/exporter'
 import { useTranslation } from 'react-i18next'
+import { useTheme } from './contexts/ThemeContext'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 export default function AdminDashboard() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation() // Updated: Destructure i18n
+  const { theme, setTheme } = useTheme() // New: Theme Hook
   const [activeTab, setActiveTab] = useState('products') 
   const [variants, setVariants] = useState<any[]>([])
   const [orders, setOrders] = useState<any[]>([]) 
@@ -652,6 +654,38 @@ export default function AdminDashboard() {
                   <option value="£">£ (GBP)</option>
                   <option value="¥">¥ (JPY)</option>
                 </select>
+              </div>
+            </div>
+
+            {/* NEW: LANGUAGE & THEME PREFERENCES */}
+            <div style={{ background: '#f5f5f5', padding: '20px', borderRadius: '8px', marginBottom: '30px', border: '1px solid #e0e0e0' }}>
+              <h3 style={{ marginTop: 0, fontSize: '1rem', color: '#555' }}>{t('pref_theme')} & {t('pref_language')}</h3>
+              <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: '200px' }}>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '0.85rem' }}>{t('pref_language')}</label>
+                      <select 
+                          value={i18n.language} 
+                          onChange={e => i18n.changeLanguage(e.target.value)}
+                          style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}
+                      >
+                          <option value="en">English (🇬🇧)</option>
+                          <option value="es">Español (🇪🇸)</option>
+                          <option value="fr">Français (🇫🇷)</option>
+                          <option value="de">Deutsch (🇩🇪)</option>
+                      </select>
+                  </div>
+                  <div style={{ flex: 1, minWidth: '200px' }}>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '0.85rem' }}>{t('pref_theme')}</label>
+                      <select 
+                          value={theme} 
+                          onChange={e => setTheme(e.target.value as any)}
+                          style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}
+                      >
+                          <option value="light">{t('theme_light')}</option>
+                          <option value="dark">{t('theme_dark')}</option>
+                          <option value="system">{t('theme_system')}</option>
+                      </select>
+                  </div>
               </div>
             </div>
 

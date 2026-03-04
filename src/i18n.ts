@@ -94,7 +94,12 @@ const resources = {
       "log_wastage": "Log Wastage",
       "reason": "Reason",
       "stock_updated": "Stock Updated",
-      "ingredient_name": "Ingredient Name"
+      "ingredient_name": "Ingredient Name",
+      "pref_language": "Language",
+      "pref_theme": "Theme",
+      "theme_light": "Light",
+      "theme_dark": "Dark",
+      "theme_system": "System"
     }
   },
   es: {
@@ -185,7 +190,42 @@ const resources = {
       "log_wastage": "Registrar Desperdicio",
       "reason": "Razón",
       "stock_updated": "Stock Actualizado",
-      "ingredient_name": "Nombre de Ingrediente"
+      "ingredient_name": "Nombre de Ingrediente",
+      "pref_language": "Idioma",
+      "pref_theme": "Tema",
+      "theme_light": "Claro",
+      "theme_dark": "Oscuro",
+      "theme_system": "Sistema"
+    }
+  },
+  fr: {
+    translation: {
+      "welcome": "Bienvenue à OpenTill",
+      "products": "Produits", "cart": "Commande", "total": "Total", "close": "Fermer",
+      "pay_now": "Payer", "table": "Table", "dining_mode": "Sur Place",
+      "kitchen_updated": "Cuisine mise à jour!", "payment_method": "Paiement",
+      "cash": "Espèces", "card": "Carte", "receipt": "Reçu",
+      "switch_language": "Langue (FR)", "admin_dashboard": "Admin",
+      "inventory": "Stock", "sales": "Ventes", "staff": "Personnel",
+      "settings": "Réglages", "analytics": "Analytique",
+      "bookings": "Réservations", "status": "Statut",
+      "pref_language": "Langue", "pref_theme": "Thème",
+      "theme_light": "Clair", "theme_dark": "Sombre", "theme_system": "Système"
+    }
+  },
+  de: {
+    translation: {
+      "welcome": "Willkommen bei OpenTill",
+      "products": "Produkte", "cart": "Bestellung", "total": "Gesamt", "close": "Schließen",
+      "pay_now": "Zahlen", "table": "Tisch", "dining_mode": "Im Haus",
+      "kitchen_updated": "Küche aktualisiert!", "payment_method": "Zahlung",
+      "cash": "Bar", "card": "Karte", "receipt": "Quittung",
+      "switch_language": "Sprache (DE)", "admin_dashboard": "Verwaltung",
+      "inventory": "Lager", "sales": "Umsatz", "staff": "Personal",
+      "settings": "Einstellungen", "analytics": "Analytik",
+      "bookings": "Reservierungen", "status": "Status",
+      "pref_language": "Sprache", "pref_theme": "Thema",
+      "theme_light": "Hell", "theme_dark": "Dunkel", "theme_system": "System"
     }
   }
 };

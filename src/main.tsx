@@ -6,6 +6,8 @@ import AdminDashboard from './AdminDashboard'
 import Login from './components/Login'
 import KitchenDisplay from './components/KitchenDisplay' // New: KDS Screen
 import CustomerMenu from './components/CustomerMenu' // New: Online Ordering
+import SettingsModal from './components/SettingsModal' // New: Settings
+import { ThemeProvider } from './contexts/ThemeContext'
 import './i18n'; // Import i18n configuration
 import './App.css'
 
@@ -13,6 +15,7 @@ function App() {
   const [session, setSession] = useState<any>(null)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showSettings, setShowSettings] = useState(false) // New: Settings Modal State
 
   useEffect(() => {
     // 1. Check active session
@@ -131,11 +134,27 @@ function App() {
                  ⚙️ Dashboard
                </a>
             )}
+            <button () => setShowSettings(true)}
+              style={{
+                background: 'transparent',
+                border: '1px solid #666',
+                color: '#ddd',
+                cursor: 'pointer',
+                fontSize: '13px',
+                padding: '5px 10px',
+                borderRadius: '5px',
+                display: 'flex', alignItems: 'center', gap: '5px'
+              }}
+            >
+              🌐
+            </button>
             <button 
+              onClick={
               onClick={handleLogout}
               style={{ 
                 background: 'transparent', 
                 border: '1px solid #444', 
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
                 color: '#ff6b6b', 
                 cursor: 'pointer', 
                 fontSize: '13px',
@@ -157,6 +176,8 @@ function App() {
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    <ThemeProvider>
+      <App />
+    </ThemeProvider>
   </React.StrictMode>,
 )
