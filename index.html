@@ -6,6 +6,14 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      window.addEventListener('error', function(event) {
+        document.body.innerHTML = '<div style="color: red; padding: 20px;"><h1>Runtime Error</h1><pre>' + event.error + '</pre></div>';
+      });
+      window.addEventListener('unhandledrejection', function(event) {
+        document.body.innerHTML = '<div style="color: red; padding: 20px;"><h1>Unhandled Promise Rejection</h1><pre>' + event.reason + '</pre></div>';
+      });
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
