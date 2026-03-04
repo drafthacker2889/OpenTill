@@ -13,40 +13,33 @@
 
 ## ✨ Features at a Glance
 
-### 🖥️ Front-of-House (POS)
-*   **Intuitive Interface**: Touch-optimized UI designed for speed and accuracy.
-*   **Order Management**: Quick add products, modifiers (e.g., "Oat Milk", "Extra Shot"), and custom notes.
-*   **Tables & Tabs**: Visual table layout management. Hold and resume orders effortlessly.
-*   **Payments**: Split bills, discounts, gift cards, cash, and integrated card terminal support.
-*   **Internet Resilience**: 
-    *   **PWA**: Installable as a native app.
-    *   **IndexedDB Caching**: Continue trading even when the internet goes down.
-    *   **Auto-Sync**: Orders synchronize with the cloud automatically upon reconnection.
+### 🖥️ **Robust Point of Sale (POS)**
+*   **Quick Service & Dining Modes**: Toggle between fast-casual counter service and full tableside ordering with a visual table map.
+*   **Atomic Transactions**: Utilizing PostgreSQL RPCs (`sell_items`) to ensure **stock deduction** and **financial recording** happen in a single, fail-safe database transaction. Zero race conditions.
+    *   *Prevents overselling even during high-traffic periods.*
+*   **True Offline Resilience**: Built on **Dexie.js** and **Workbox**, the POS works completely offline.
+    *   Orders are stored locally in IndexedDB.
+    *   **Auto-Sync**: Background synchronization pushes offline sales and kitchen tickets the moment connectivity returns.
 
-### 🍳 Back-of-House (KDS & Inventory)
-*   **Kitchen Display System (KDS)**:
-    *   Replace ticket printers with real-time digital screens.
-    *   Item-level status updates (Pending -> Ready).
-    *   **Offline Mode**: Kitchen continues running even if the cloud connection is lost.
-*   **Inventory & Supply Chain**:
-    *   **Real-time Stock Tracking**: Automatic deduction based on recipes/ingredients.
-    *   **Purchase Orders (PO)**: Manage suppliers, create drafts, and receive stock.
-    *   **Wastage Logging**: Track loss/spoilage reasons.
+### 🍳 **Intelligent Kitchen Display System (KDS)**
+*   **Real-Time Fire**: Orders appear instantly on kitchen screens via **Supabase Realtime** websockets.
+*   **Smart Routing**: Items are routed to specific stations (e.g., Drinks bar vs. Hot Food).
+*   **Syncs with Offline POS**: Even if the POS loses internet, it continues to function and will push queued tickets to the KDS once reconnected.
 
-### 📊 Management & CRM
-*   **CRM & Loyalty**:
-    *   Track customer spending habits.
-    *   Built-in loyalty points system (Earn & Redeem).
-*   **Staff Management**:
-    *   Role-based access control (Admin, Manager, Cashier, Kitchen).
-    *   **Time Clock**: integrated Clock-In/Out for labor cost calculation.
-*   **Analytics Dashboard**:
-    *   Real-time Sales vs Labor Cost.
-    *   Top-selling items and staff performance reports.
+### 📦 **Inventory & Supply Chain**
+*   **Recipe-Based Deduction**: Define ingredients (e.g., "Coffee Bean", "Milk", "Sugar") for products. Selling a "Latte" automatically deducts 18g of beans and 200ml of milk.
+*   **Low Stock Alerts**: Visual warnings when ingredients dip below thresholds.
+*   **Supplier Management**: Create and track Purchase Orders (PO) to restock efficiently.
 
-### 🔌 Open API & Integrations
-*   **Delivery Webhooks**: Native support for **UberEats** and **Deliveroo** webhooks via Supabase Edge Functions.
-*   **Local API**: Extend functionality with custom integrations.
+### 💳 **Customer & Loyalty**
+*   **Self-Service Menu**: A dedicated customer-facing interface for QR code ordering at the table.
+    *   *Secure*: Pricing is calculated server-side to prevent tampering.
+*   **Integrated Loyalty**: Earn points per transaction and redeem for discounts.
+*   **Gift Cards**: Issue, redeem, and recharge gift cards with secure balance tracking.
+
+### 🔌 **Open API & Integrations**
+*   **Delivery Webhooks**: Ready-to-use **Supabase Edge Functions** to ingest orders from UberEats/Deliveroo webhooks directly into your POS.
+*   **Developer Friendly**: Full TypeScript codebase, strict typing, and a documented SQL schema.
 
 ---
 
