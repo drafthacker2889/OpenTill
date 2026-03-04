@@ -44,12 +44,13 @@ export default function TableSelection({ onSelect, setDiningMode }: Props) {
     if (tableError || cartError) {
       console.error("Error fetching table status:", tableError?.message || cartError?.message)
     } else {
-      // 3. Map through all tables and set status to OCCUPIED if their number exists in table_cart_items
+      // 3. Map through all tables and set status to OCCUPIED only if active cart exists, 
+      //    otherwise respect the default status (RESERVED/AVAILABLE)
       const occupiedTableNames = new Set(activeCarts?.map(c => c.table_number));
-      // Standardize logic
+      
       const updatedTables = allTables ? allTables.map((t: any) => ({
         ...t,
-        status: occupiedTableNames.has(t.table_number) ? 'OCCUPIED' : 'AVAILABLE'
+        status: occupiedTableNames.has(t.table_number) ? 'OCCUPIED' : t.status
       })) : [];
 
       setTables(updatedTables as DiningTable[])

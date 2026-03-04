@@ -124,7 +124,8 @@ export default function Root({ userRole }: RootProps) {
         name: item.product_name,
         price: item.price_at_addition,
         quantity: item.quantity,
-        status: item.status //
+        status: item.status,
+        modifiers: item.modifiers || [] // FIX: Ensure modifiers are loaded
       })));
     }
   };
@@ -135,12 +136,20 @@ export default function Root({ userRole }: RootProps) {
     if (diningModeActive && !selectedTable) return;
 
     if (variant.track_stock) {
-      // Logic for stock check... simple version: ignore modifiers stock for now, just main item
-      // FIXED: Use reduce to sum ALL quantities of this variant in cart, not just the first one found
+      // Logic for stock check... 
+      // 1. Get quantity in CURRENT cart
       const currentQty = cart.filter(i => i.id === variant.id).reduce((sum, i) => sum + i.quantity, 0);
       
-      if (currentQty >= variant.stock_quantity) {
-        return alert(`Sorry, only ${variant.stock_quantity} left in stock!`);
+      // 2. NEW: Get quantity in OTHER active tables (prevent Overbooking)
+      const { data: globalDrafts } = await supabase
+        .from('table_cart_items')
+        .select('quantity')
+        .eq('variant_id', variant.id);
+      
+      const globalQty = globalDrafts ? globalDrafts.reduce((acc, row) => acc + row.quantity, 0) : 0;
+      
+      if ((currentQty + globalQty) >= variant.stock_quantity) {
+        return alert(`Sorry, only ${variant.stock_quantity} left in stock! (Currently held in other carts)`);
       }
     }
 
