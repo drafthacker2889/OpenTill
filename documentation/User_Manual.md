@@ -66,16 +66,19 @@ Before starting service, ensure your terminal is ready.
 
 ### 3.2 Kitchen & Back-of-House
 **Focus**: Efficiency and Flow.
-*   **Station Setup**: Check KDS screen is online.
-*   **Order Management**: Watch for new tickets. Start cooking "Green" tickets immediately.
-*   **Ticket Bumping**: Tap "Ready" when food is plated to clear the screen.
+*   **Station Setup**: Check KDS screen (`/kitchen`) is online and displaying correct branch.
+*   **Order Management**: Tickets appear instantly.
+    *   **Yellow**: New/Cooking.
+    *   **Green**: Ready to Serve.
+    *   **Red**: Late/Delayed (>15 mins).
+*   **Ticket Bumping**: Tap "Ready" when food is plated. Double-tap to recall if accidental.
 
 ### 3.3 Managers
 **Focus**: Control and Audit.
-*   **Live Dashboard**: Monitor Sales Per Hour and open tables.
-*   **Staff Management**: Add new users, adjust permissions.
-*   **Product Management**: Update prices, add specials, set low-stock alerts.
-*   **Reporting**: Generate Z-Reports (End of Day) and export sales data.
+*   **Live Dashboard**: Monitor Sales, Labor Cost vs Revenue, and Voided Orders.
+*   **Staff Management**: Create/Disable users, View Shift Reports.
+*   **Audit Logs**: Review critical actions (e.g., "Manager Override for $50 Void").
+*   **Reservations**: Manage table bookings and walk-in waitlists.
 
 ---
 
@@ -139,6 +142,26 @@ Before starting service, ensure your terminal is ready.
 ---
 
 ## 5. Kitchen Display System (KDS)
+
+Replace paper tickets with digital screens (`URL/kitchen`).
+
+### Features:
+1.  **Ticket Cards**: Each card shows:
+    *   Table Number / Takeaway Name.
+    *   Wait Time (counts up in minutes).
+    *   List of Items + Modifiers (e.g., "Burger - No Onion").
+2.  **Color Codes**:
+    *   **Gray/White**: New (< 10m).
+    *   **Yellow**: Warning (10-20m).
+    *   **Red**: Critical (> 20m).
+3.  **Actions**:
+    *   **Tap Item**: Strike-through (mark as "Plated").
+    *   **Tap "Ready"**: Clears entire ticket (Food Runner notified).
+    *   **"Void"**: Only Managers can void tickets from the POS; KDS updates automatically.
+
+---
+
+## 6. Inventory & Stock Management
 
 The KDS replaces paper tickets.
 

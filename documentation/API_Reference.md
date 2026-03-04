@@ -16,6 +16,7 @@
     *   [`orders` & `order_items`](#orders--order_items)
     *   [`kitchen_tickets`](#kitchen_tickets)
     *   [`products` & `ingredients`](#products--ingredients)
+    *   [`audit_logs`](#audit_logs)
 5.  [**Authentication & Headers**](#5-authentication--headers)
 6.  [**Errors & Troubleshooting**](#6-errors--troubleshooting)
 
@@ -92,6 +93,41 @@ FUNCTION increment_gift_card_balance(card_code_input text, amount numeric) RETUR
 {
   "success": true,
   "new_balance": 150.00
+}
+```
+
+---
+
+### `get_audit_logs`
+**Purpose**: Retrieve logs of critical actions by branch and time range.
+
+**Signature**:
+```sql
+FUNCTION get_audit_logs(branch_id uuid, start_time timestamptz, end_time timestamptz) RETURNS SETOF audit_logs
+```
+
+**Parameters**:
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `branch_id` | `UUID` | The target store. |
+| `start_time` | `Timestamptz` | Range start. |
+| `end_time` | `Timestamptz` | Range end. |
+
+---
+
+### `create_reservation`
+**Purpose**: Block a table for a specific time and party size, checking conflicts.
+
+**Signature**:
+```sql
+FUNCTION create_reservation(payload jsonb) RETURNS jsonb
+```
+
+**Returns**:
+```json
+{
+  "success": true,
+  "booking_id": "uuid..." 
 }
 ```
 

@@ -26,11 +26,13 @@
 OpenTill is built as a **Progressive Web App (PWA)** that functions identically on Windows Terminals, iPads, and Android tablets.
 
 ### Frontend Stack
-*   **Framework**: React 18 + TypeScript (strict mode).
+*   **Framework**: React 18 + TypeScript (Strict Mode enabled).
 *   **Build Tool**: Vite (for fast HMR and optimized bundling).
+*   **Testing**:
+    *   **Unit/Integration**: Vitest (`src/services/*.test.ts`).
+    *   **End-to-End**: Playwright (`tests/e2e/*.spec.ts`).
 *   **State Management**:
     *   **React Context**: For UI state (Modal visibility, current User).
-    *   **RxJS**: For complex asynchronous streams (Barcode scanner input).
     *   **SWR**: For data fetching and caching.
 *   **Styling**: Tailwind CSS (utility-first).
 *   **Local Database**: **Dexie.js** (IndexedDB wrapper) stores the entire product catalog and pending offline orders.
@@ -93,6 +95,10 @@ graph TD
 *   **`orders`**: Transaction header.
 *   **`order_items`**: Line items snapshot (stores name/price at time of sale).
 *   **`kitchen_tickets`**: KDS display items.
+*   **`audit_logs`**: Tracks critical actions (Shift Start/End, Voids, Refunds).
+*   **`booking_settings`**: Configures reservation intervals and table limits.
+*   **`gift_card_transactions`**: Logs all gift card usage.
+*   **`shifts` / `time_clocks`**: Employee time tracking.
 
 ### Row Level Security (RLS) Policies
 Every table has enforced RLS.
