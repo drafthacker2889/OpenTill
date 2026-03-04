@@ -23,16 +23,31 @@ export const BookingService = {
   async checkPacing(date: string, time: string, newCovers: number): Promise<boolean> {
     const { data: intervalSettings } = await supabase
       .from('booking_settings')
-      .select('max_covers_per_interval')
+      .select('max_covers_per_interval, interval_minutes')
       .single();
       
     const LIMIT = intervalSettings?.max_covers_per_interval || 20;
+    const INTERVAL = intervalSettings?.interval_minutes || 15;
 
-    // Count existing covers for this specific time slot
+    // Check covers within the interval window (+/- INTERVAL/2)
+    // Actually, usually we check the slot itself. E.g. 19:00 covers.
+    // But to fix the "19:05" bug, we should check a range around the requested time.
+    
+    // Construct range: requested time - 14 mins to requested time + 14 mins?
+    // Or just group by 15 min slots.
+    // Simplest fix for the bug described: Check bookings where time is between (requested - 15) and (requested + 15).
+    
+    const startTime = new Date(`${date}T${time}:00`);
+    const rangeStart = new Date(startTime.getTime() - (INTERVAL * 60000));
+    const rangeEnd = new Date(startTime.getTime() + (INTERVAL * 60000));
+
+    // Convert back to ISO string for comparison (assuming booking_time is timestamp)
+    
     const { count } = await supabase
       .from('bookings')
       .select('*', { count: 'exact', head: true })
-      .eq('booking_time', `${date}T${time}:00`) // Simplified match
+      .gte('booking_time', rangeStart.toISOString())
+      .lte('booking_time', rangeEnd.toISOString())
       .neq('status', 'CANCELLED');
 
     return (count || 0) + newCovers <= LIMIT;

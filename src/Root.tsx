@@ -134,8 +134,9 @@ export default function Root({ userRole }: RootProps) {
 
     if (variant.track_stock) {
       // Logic for stock check... simple version: ignore modifiers stock for now, just main item
-      const existingInCart = cart.find(i => i.id === variant.id); // Potential bug: matches first one
-      const currentQty = existingInCart ? existingInCart.quantity : 0;
+      // FIXED: Use reduce to sum ALL quantities of this variant in cart, not just the first one found
+      const currentQty = cart.filter(i => i.id === variant.id).reduce((sum, i) => sum + i.quantity, 0);
+      
       if (currentQty >= variant.stock_quantity) {
         return alert(`Sorry, only ${variant.stock_quantity} left in stock!`);
       }
@@ -423,9 +424,9 @@ export default function Root({ userRole }: RootProps) {
          }
       }
 
-      // DEDUCT INGREDIENTS
-      const ingredientItems = cart.map(item => ({ variant_id: item.id, quantity: item.quantity }));
-      deductIngredients(ingredientItems);
+      // DEDUCT INGREDIENTS - NOW HANDLED BY RPC 'sell_items'
+      // const ingredientItems = cart.map(item => ({ variant_id: item.id, quantity: item.quantity }));
+      // deductIngredients(ingredientItems);
 
       // IF DINING MODE: Clear the saved items and reset table status to AVAILABLE
       if (selectedTable) {

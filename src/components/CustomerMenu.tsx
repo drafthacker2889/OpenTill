@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../supabaseClient'
 import { useTranslation } from 'react-i18next'
-import { deductIngredients } from '../utils/inventory'
 import ModifierSelectionModal from './ModifierSelectionModal'
 export default function CustomerMenu() {
   const { t } = useTranslation()
@@ -12,9 +11,14 @@ export default function CustomerMenu() {
   const [tableNumber, setTableNumber] = useState('')
   const [orderSent, setOrderSent] = useState(false)
   const [selectedVariantForMods, setSelectedVariantForMods] = useState<any>(null)
+  const [branchId, setBranchId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchMenu()
+    // Fetch default branch for order attribution
+    supabase.from('branches').select('id').limit(1).single().then(({ data }) => {
+        if (data) setBranchId(data.id)
+    })
   }, [])
 
   const fetchMenu = async () => {
@@ -65,36 +69,27 @@ export default function CustomerMenu() {
 
     const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
 
-    const { data: order, error } = await supabase
-      .from('orders')
-      .insert({
-        total_amount: total,
-        payment_method: 'online', // Or 'pay_at_counter'
-        status: 'pending', // Will show on KDS
-        customer_name: customerName, // Need to ensure column exists or just store in metadata
-        table_number: tableNumber
-      })
-      .select()
-      .single()
+    // Secure Transaction via RPC
+    const payload = {
+        branchId: branchId,
+        totalAmount: total, // In cents
+        paymentMethod: 'online',
+        items: cart.map(item => ({
+            id: item.id, // variant_id
+            quantity: item.quantity,
+            price: item.price,
+            modifiers: item.modifiers || []
+        })),
+        customerId: null, // Could be linked if logged in
+        customerName: customerName,
+        tableNumber: tableNumber
+    }
+
+    const { data: order, error } = await supabase.rpc('sell_items', { order_payload: payload })
 
     if (error) {
       alert("Order Failed: " + error.message)
     } else {
-      // Add Items
-      const items = cart.map(item => ({
-        order_id: order.id,
-        variant_id: item.id,
-        quantity: item.quantity,
-        price_at_sale: item.price,
-        product_name_snapshot: item.products.name + (item.name !== 'Standard' ? ` (${item.name})` : ''),
-        modifiers: item.modifiers || []
-      }))
-
-      await supabase.from('order_items').insert(items)
-      
-      // Deduct Ingredients
-      deductIngredients(items)
-
       setOrderSent(true)
       setCart([])
     }

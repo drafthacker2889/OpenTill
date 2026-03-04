@@ -72,24 +72,13 @@ export default function GiftCardManager() {
 
     const val = parseFloat(amount);
     
-    // Update Balance
+    // Update Balance via RPC
     const { error } = await supabase.rpc('increment_gift_card_balance', { 
-        card_code_input: code, 
-        amount_input: val 
+        card_code: code, 
+        amount: val 
     });
 
-    // If RPC doesn't exist yet, do it manually for now (though RPC is better for atomicity)
-    // We will use a manual update here since I haven't defined increment_gift_card_balance in schema yet
-    // Actually, let's just do a manual update + insert for simplicity in this MVP
-    
-    const { data: card } = await supabase.from('gift_cards').select('balance').eq('code', code).single();
-    if(!card) return;
-
-    const newBal = (card.balance || 0) + val;
-    
-    const { error: updateErr } = await supabase.from('gift_cards').update({ balance: newBal }).eq('code', code);
-    
-    if(!updateErr) {
+    if(!error) {
         await supabase.from('gift_card_transactions').insert({
             card_code: code,
             amount: val,
@@ -98,7 +87,7 @@ export default function GiftCardManager() {
         fetchGiftCards();
         alert("Recharged Successfully");
     } else {
-        alert("Error recharging: " + updateErr.message);
+        alert("Error recharging: " + error.message);
     }
   };
 
