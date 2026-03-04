@@ -10,6 +10,7 @@ import { convertToCSV } from './utils/exporter'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from './contexts/ThemeContext'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { Monitor } from 'lucide-react'
 
 export default function AdminDashboard() {
   const { t, i18n } = useTranslation() // Updated: Destructure i18n
@@ -427,6 +428,19 @@ export default function AdminDashboard() {
             </a>
             <a href="/" style={{ padding: '10px 20px', background: '#333', color: 'white', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold' }}>
               ← Back to Till
+            </a>
+            
+            <a 
+              href="/kitchen" 
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '8px', 
+                textDecoration: 'none', color: '#e65100', background: '#fff3e0',
+                padding: '10px 15px', borderRadius: '8px', fontWeight: 'bold',
+                border: '1px solid #e65100'
+              }}
+            >
+              <Monitor size={18} />
+              Open KDS
             </a>
         </div>
       </div>

@@ -7,9 +7,18 @@ const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
 const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
 serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
   if (req.method !== 'POST') {
-    return new Response('Method Not Allowed', { status: 405 })
+    return new Response('Method Not Allowed', { status: 405, headers: corsHeaders })
   }
 
   try {
@@ -18,32 +27,48 @@ serve(async (req) => {
 
     // Normalize incoming order payload
     const orderData = {
-      source: provider, // 'ubereats', 'deliveroo'
-      external_id: payload.id || payload.order_id,
-      customer_name: payload.customer?.name || 'Delivery Customer',
-      total_amount: payload.total_amount || 0,
-      status: 'pending', // or 'received'
-      items: payload.items || [], // JSONB column for items
-      delivery_address: payload.delivery_address,
+      // source: provider, // Add this column if you edit your schema
+      customer_id: null, // Delivery customers might not be in your CRM
+      branch_id: payload.branch_id || 'default', // Default branch
+      total_amount: Math.round(payload.total_amount * 100), // Convert to cents if incoming is dollars/float
+      payment_method: `ONLINE_${provider.toUpperCase()}`,
+      status: 'confirmed', // Assuming prepaid
+      // items: payload.items || [], // Store raw items in a JSONB column if exists, OR use sell_items RPC below
       created_at: new Date().toISOString()
     }
+    
+    // Use the RPC to ensure items are handled correctly (inventory, etc)
+    const rpcPayload = {
+        branchId: orderData.branch_id,
+        totalAmount: orderData.total_amount,
+        paymentMethod: orderData.payment_method,
+        items: (payload.items || []).map((i: any) => ({
+            id: i.id || 'Unknown', // Variant ID needs to match your system
+            name: i.name,
+            price: Math.round(i.price * 100),
+            quantity: i.quantity,
+            modifiers: i.modifiers || []
+        }))
+    }
 
-    // Insert into Supabase 'orders' table
-    const { data, error } = await supabase
-      .from('orders')
-      .insert(orderData)
-      .select()
+    // Insert into Supabase using the same logic as the POS
+    // Note: If you don't have authentication on this webhook, be careful. 
+    // Ideally use a shared secret in headers.
+    const { data: rpcData, error: rpcError } = await supabase.rpc('sell_items', { order_payload: rpcPayload });
 
-    if (error) throw error
+    if (rpcError) throw rpcError;
 
-    return new Response(JSON.stringify({ success: true, order: data[0] }), {
-      headers: { "Content-Type": "application/json" },
+    // Optional: Create a kitchen ticket explicitly if sell_items doesn't do it automatically for online orders
+    // But 'sell_items' triggers usually handle this.
+
+    return new Response(JSON.stringify({ success: true, order_id: rpcData }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     })
 
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), {
-      headers: { "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 400,
     })
   }
